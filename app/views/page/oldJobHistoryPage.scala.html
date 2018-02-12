@@ -14,7 +14,7 @@
 * the License.
 *@
 
-@(jobDefId: String, graphType: String, results: Html)
+@(jobDefId: String, graphType: String, finishedTimeBegin: String, finishedTimeEnd: String, results: Html)
 
 @main("Dr. Elephant - Job History", "jobhistory") {
 
@@ -23,8 +23,8 @@
     @tags.panel(){ Job History } {
       <form id="job-history-form" role="form" method="get" action="@routes.Application.oldJobHistory()">
         <div class="form-group">
-          <label for="form-job-def-id">Job Definition URL/ID</label>
-          <input type="text" class="form-control" id="form-job-def-id" name="job-def-id" placeholder="Job Def URL/ID" value="@jobDefId">
+          <label for="form-job-history-job-def-id">Job Definition URL/ID</label>
+          <input type="text" class="form-control" id="form-job-history-job-def-id" name="job-history-job-def-id" placeholder="Job Def URL/ID" value="@jobDefId">
         </div>
         <label for="graphType">Filter</label>
         <select class="form-control" name="select-graph-type" id="graphType">
@@ -47,9 +47,34 @@
             <option value="heuristics">Heuristics</option>
           }
 
+          @if(graphType == "summary") {
+          <option value="summary" selected>Job Summary</option>
+          } else {
+          <option value="summary">Job Summary</option>
+          }
+
         </select>
+
+        <!--Job Finish Date filter-->
+
+          <div class="checkbox" id="form-summary-checkbox">
+            <label><input type="checkbox" id="form-datetime-enable" name="datetime-enable" value=""> Job Finish
+              Date</label>
+          </div>
+          <div class="form-group" style="padding-left:10px;">
+            <input type="text" class="form-control" id="form-finished-time-begin-date" name="finished-time-begin-date"
+                   placeholder="From: mm/dd/yyyy">
+
+            <input type="hidden" id="form-finished-time-begin" name="finished-time-begin" value="@finishedTimeBegin"/>
+          </div>
+          <div class="form-group" style="padding-left:10px;">
+            <input type="text" class="form-control" id="form-finished-time-end-date" name="finished-time-end-date"
+                   placeholder="To: mm/dd/yyyy">
+           <input type="hidden" id="form-finished-time-end" name="finished-time-end" value="@finishedTimeEnd"/>
+          </div>
+
         <br>
-        <button type="submit" class="btn btn-default">Search</button>
+        <button type="submit" class="btn btn-default" id="submit-button">Search</button>
       </form>
     }
   }

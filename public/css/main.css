@@ -212,6 +212,36 @@ body {
   font-size:12px;
 }
 
+.critical-runs-td {
+  background: #eed5d5;
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Arial Narrow, Helvetica, sans-serif;
+  font-size:12px;
+}
+
+.severe-runs-td {
+  background: #f7e7e1;
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Arial Narrow, Helvetica, sans-serif;
+  font-size:12px;
+}
+
+.moderate-runs-td {
+  background: #fcf8e3;
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Arial Narrow, Helvetica, sans-serif;
+  font-size:12px;
+}
+
+.low-runs-td {
+  background: #e0ffff;
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Arial Narrow, Helvetica, sans-serif;
+  font-size:12px;
+}
+
+.normal-runs-td {
+  background: #dff0d8;
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Arial Narrow, Helvetica, sans-serif;
+  font-size:12px;
+}
+
 
 .metrics-icons-table {
   height: 16px;

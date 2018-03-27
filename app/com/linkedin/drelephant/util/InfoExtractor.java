@@ -31,6 +31,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.Map;
 
+import com.linkedin.drelephant.tez.data.TezDAGApplicationData;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 import org.w3c.dom.Document;
@@ -115,7 +116,10 @@ public class InfoExtractor {
       properties = retrieveMapreduceProperties((MapReduceApplicationData) data);
     } else if ( data instanceof SparkApplicationData) {
       properties = retrieveSparkProperties((SparkApplicationData) data);
+    } else if ( data instanceof TezDAGApplicationData) {
+      properties = retrieveTezProperties((TezDAGApplicationData) data);
     }
+
     Scheduler scheduler = getSchedulerInstance(data.getAppId(), properties);
 
     if (scheduler == null) {
@@ -163,6 +167,15 @@ public class InfoExtractor {
    * @return the retrieve mapreduce properties
    */
   public static Properties retrieveMapreduceProperties(MapReduceApplicationData appData) {
+    return appData.getConf();
+  }
+
+  /**
+   * Retrieve the tez application properties
+   * @param appData the Tez Application Data
+   * @return the retrieve tez properties
+   */
+  public static Properties retrieveTezProperties(TezDAGApplicationData appData) {
     return appData.getConf();
   }
 

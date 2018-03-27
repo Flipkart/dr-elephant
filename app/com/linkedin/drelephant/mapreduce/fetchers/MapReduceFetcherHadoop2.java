@@ -71,19 +71,32 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   }
 
   @Override
-  public MapReduceApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+  public MapReduceApplicationData fetchConfData(AnalyticJob analyticJob) {
     String appId = analyticJob.getAppId();
     MapReduceApplicationData jobData = new MapReduceApplicationData();
     String jobId = Utils.getJobIdFromApplicationId(appId);
     jobData.setAppId(appId).setJobId(jobId);
     // Change job tracking url to job history page
     analyticJob.setTrackingUrl(_jhistoryWebAddr + jobId);
-    try {
 
       // Fetch job config
+    try {
       Properties jobConf = _jsonFactory.getProperties(_urlFactory.getJobConfigURL(jobId));
       jobData.setJobConf(jobConf);
+    } catch (Exception e) {
+      logger.error("Failed to fetch conf data: ", e);
+    }
+      return jobData;
+  }
 
+  @Override
+  public MapReduceApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+
+    String appId = analyticJob.getAppId();
+    String jobId = Utils.getJobIdFromApplicationId(appId);
+    MapReduceApplicationData jobData = fetchConfData(analyticJob);
+
+    try {
       URL jobURL = _urlFactory.getJobURL(jobId);
       String state = _jsonFactory.getState(jobURL);
 

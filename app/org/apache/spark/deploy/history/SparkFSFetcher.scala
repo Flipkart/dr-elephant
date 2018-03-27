@@ -69,6 +69,8 @@ class SparkFSFetcher(fetcherConfData: FetcherConfigurationData) extends Elephant
     sparkConf
   }
 
+  override def fetchConfData(job: AnalyticJob): SparkApplicationData = ???
+
   def fetchData(analyticJob: AnalyticJob): SparkApplicationData = {
     val appId = analyticJob.getAppId()
     doAsPrivilegedAction { () => doFetchData(appId) }

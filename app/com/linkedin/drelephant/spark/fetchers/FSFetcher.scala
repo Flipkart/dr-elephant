@@ -30,6 +30,8 @@ class FSFetcher(fetcherConfigurationData: FetcherConfigurationData)
   extends ElephantFetcher[SparkApplicationData] {
   lazy val legacyFetcher = new SparkFSFetcher(fetcherConfigurationData)
 
+  override def fetchConfData(job: AnalyticJob): SparkApplicationData = ???
+
   override def fetchData(analyticJob: AnalyticJob): SparkApplicationData = {
     val legacyData = legacyFetcher.fetchData(analyticJob)
     LegacyDataConverters.convert(legacyData)

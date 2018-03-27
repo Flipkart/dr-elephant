@@ -29,7 +29,7 @@
   </fetcher>
 -->
 <fetchers>
-  <!--
+
   <fetcher>
     <applicationtype>mapreduce</applicationtype>
     <classname>com.linkedin.drelephant.mapreduce.fetchers.MapReduceFetcherHadoop2</classname>
@@ -37,7 +37,7 @@
       <sampling_enabled>false</sampling_enabled>
     </params>
   </fetcher>
-  -->
+
   <!--
      This is a replacement for the MapReduceFetcherHadoop2 that attempts to burn
      through queues of jobs faster by pulling data directly from HDFS rather than going through
@@ -51,7 +51,7 @@
      To work properly, this fetcher should use the same timezone with the job history server.
      If not set, the local timezone will be used.
    -->
-
+<!--
   <fetcher>
     <applicationtype>mapreduce</applicationtype>
     <classname>com.linkedin.drelephant.mapreduce.fetchers.MapReduceFSFetcherHadoop2</classname>
@@ -62,7 +62,7 @@
     </params>
   </fetcher>
 
-
+-->
   <!--
     FSFetcher for Spark. Loads the eventlog from HDFS and replays to get the metrics and application properties
 

@@ -28,6 +28,7 @@ import java.net.URL;
 import java.util.*;
 import models.AppResult;
 import models.CheckPoint;
+import models.FailedAppResult;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
@@ -244,6 +245,14 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
       } else {
         if (analyticJob != null) {
           MetricsController.triggerJobRetriesExhaustionEvent();
+          try {
+            FailedAppResult result = analyticJob.getFailedAppResult(e);
+            result.save();
+
+          } catch (Exception ex) {
+            logger.error("Failed to get info for failed app: " + analyticJob.getAppId());
+            logger.error(ExceptionUtils.getStackTrace(ex));
+          }
           logger.error("Drop the analytic job. Reason: reached the max retries for application id = ["
                   + analyticJob.getAppId() + "].");
         }

@@ -62,7 +62,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   private String _timelinewebaddress;
   private String _jhistoryWebAddr;
   private String _resourcemanager;
-  private String _resourcemanagerWebAddress;
+  private String _applicationHistoryAddress;
   private String _dagId;
   private static final String SUCCEEDED="SUCCEEDED";
   /**
@@ -90,8 +90,26 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     _jhistoryWebAddr = "http://" + jhistoryAddr + "/jobhistory/job/";
 
     _resourcemanager = String.format("http://%s/cluster/app/", resourcemanager);
-    _resourcemanagerWebAddress = String.format("http://%s/ws/v1/cluster/apps/", resourcemanager);
+    _applicationHistoryAddress = String.format("http://%s/ws/v1/applicationhistory/apps/", timelineaddress);
+  }
 
+  @Override
+  public TezDAGApplicationData fetchConfData(AnalyticJob analyticJob) {
+    String appId = analyticJob.getAppId();
+    TezDAGApplicationData jobData = new TezDAGApplicationData();
+    String jobId = Utils.getJobIdFromApplicationId(appId);
+    jobData.setAppId(appId).setJobId(jobId);
+    // Change job tracking url to job history page
+    analyticJob.setTrackingUrl(_resourcemanager + appId);
+
+    // Fetch job config
+    try {
+      Properties jobConf = _jsonFactory.getProperties(_urlFactory.getJobConfigURL(appId));
+      jobData.setJobConf(jobConf);
+    } catch (Exception e) {
+      logger.error("Failed to fetch conf data: ", e);
+    }
+    return jobData;
   }
 
   /**
@@ -101,22 +119,12 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
    */
   @Override
   public TezDAGApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+
     String appId = analyticJob.getAppId();
-    TezDAGApplicationData jobData = new TezDAGApplicationData();
     String jobId = Utils.getJobIdFromApplicationId(appId);
-    jobData.setAppId(appId).setJobId(jobId);
-    // Change job tracking url to job history page
-    analyticJob.setTrackingUrl(_resourcemanager + appId);
+    TezDAGApplicationData jobData = fetchConfData(analyticJob);
     try {
-
-      // Fetch job config
-      Properties jobConf = _jsonFactory.getProperties(_urlFactory.getJobConfigURL(appId));
-      jobData.setJobConf(jobConf);
-
-      //Fetch number of dags submitted
       int dagCount = getDagSubmittedCount(_urlFactory.getTezDagSubmittedCountURL(appId),jobData);
-
-
 
       //Right now it only supports DAGs which succeeded. It looks at DAG details to understand wether the application failed or succeded later in the code.
       String state = "SUCCEEDED";
@@ -130,7 +138,6 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
         TezVertexData[] tezVertexData=null;
         String dagId = null;
-        //TezDAGData[] tezDAGData=new TezDAGData[dagCount];
         List<TezDAGData> tezDAGDataList = new ArrayList<TezDAGData>();
         List<TezVertexTaskData> mapperList = new ArrayList<TezVertexTaskData>();
         List<TezVertexTaskData> reducerList = new ArrayList<TezVertexTaskData>();
@@ -178,10 +185,9 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
 
     JsonNode rootNode = ThreadContextTez.readJsonNode(url);
-
-    String diagnosticsInfo = rootNode.path("app").path("diagnostics").getValueAsText();
-    Long startedTime = (rootNode.path("app").path("startedTime").getLongValue());
-    Long finishedTime = (rootNode.path("app").path("finishedTime").getLongValue());
+    String diagnosticsInfo = rootNode.path("diagnosticsInfo").getValueAsText();
+    Long startedTime = (rootNode.path("startedTime").getLongValue());
+    Long finishedTime = (rootNode.path("finishedTime").getLongValue());
     int dagCount = 0;
     if(diagnosticsInfo!=null){
       String dagTypes[] = diagnosticsInfo.replace("Session stats:", "").split(",");
@@ -191,8 +197,9 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
       for(String dagType:dagTypes){
 
+        if(dagType.contains("successfulDAGs") && Integer.parseInt(dagType.substring((dagType.indexOf("=")+1)).trim())==0)
+          throw new RuntimeException("No successfull DAG found");
         dagCount += Integer.parseInt(dagType.substring((dagType.indexOf("=")+1)).trim());
-
       }
     }
     return dagCount;
@@ -234,9 +241,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
     private URL getJobConfigURL(String appId) throws MalformedURLException {
       appId = "tez_"+appId;
-      //System.out.println(appId+"appId");
       appId =_tezRoot+"TEZ_APPLICATION/"+appId;
-      //System.out.println(appId+"appId");
       return new URL(appId);
     }
 
@@ -260,33 +265,21 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
       return new URL(_restRoot + "/" + jobId + "/tasks/" + taskId + "/attempts/" + attemptId);
     }
     private URL getTezDAGURL(String appId,int id) throws MalformedURLException {
+
       String dagId = appId.replace("application","dag");
-      //	System.out.println(dagId+"dagId");
-      dagId =_tezRoot+"TEZ_DAG_ID/"+dagId+"_"+id;
-      //	System.out.println(dagId+"dagId");
+      dagId =_tezRoot+"TEZ_VERTEX_ID?limit=9007199254740991&primaryFilter=TEZ_DAG_ID:"+dagId+"_"+id+"&secondaryFilter=status:SUCCEEDED";
       return new URL(dagId);
     }
     private String getTezDAGId(String appId,int id) throws MalformedURLException {
       String dagId = appId.replace("application","dag");
-      //	System.out.println(dagId+"dagId");
       dagId =dagId+"_"+id;
-      //	System.out.println(dagId+"dagId");
       return (dagId);
     }
     private URL getTezDagSubmittedCountURL(String appId) throws MalformedURLException{
-      return new URL(_resourcemanagerWebAddress+appId);
+      return new URL(_applicationHistoryAddress+appId);
     }
-    private URL getTezDAGURL(String dagId) throws MalformedURLException {
-      return new URL(_tezRoot+"TEZ_DAG_ID/"+dagId);
-    }
-
-    private URL getTezVertexURL(String tezVertexId) throws MalformedURLException {
-
-      String tezVertexURL = _tezRoot+"TEZ_VERTEX_ID/"+tezVertexId;
-      return new URL(tezVertexURL);
-    }
-    private URL getTezTaskIdURL(String tezTaskId) throws MalformedURLException {
-      String tezTaskIdURL = _tezRoot+"TEZ_TASK_ID/"+tezTaskId;
+    private URL getTezTaskIdURL(String vertexId) throws MalformedURLException {
+      String tezTaskIdURL = _tezRoot + "TEZ_TASK_ID?limit=9007199254740991&primaryFilter=TEZ_VERTEX_ID:" + vertexId + "&secondaryFilter=status:SUCCEEDED";
       return new URL(tezTaskIdURL);
     }
 
@@ -348,8 +341,6 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     private TezCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
       TezCounterData holder = new TezCounterData();
 
-      //  URL tezURL = _urlFactory.getTezDAGURL(_dagId);
-      //new URL("http://localhost:8188/ws/v1/timeline/TEZ_DAG_ID/dag_1475423301689_0009_1");
       JsonNode rootNodeTez = ThreadContextTez.readJsonNode(url);
       JsonNode groupsTez = rootNodeTez.path("otherinfo").path("counters").path("counterGroups");
       for (JsonNode group : groupsTez) {
@@ -408,27 +399,21 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
         return;
       }
 
-      JsonNode vertexNode = rootNode.path("otherinfo").path("vertexNameIdMapping");
-      Iterator<JsonNode> tasks = vertexNode.iterator();
-      Iterator<String> vertexNames = vertexNode.getFieldNames();
+      Iterator<JsonNode> vertexNode = rootNode.path("entities").getElements();
 
-      while (tasks.hasNext() && vertexNames.hasNext()) {
+      while (vertexNode.hasNext()) {
 
-        JsonNode vertex = tasks.next();
-        String vertexId = vertex.getValueAsText();
+        JsonNode vertex = vertexNode.next();
+        String vertexId = vertex.get("entity").getValueAsText();
         TezVertexData tezVertexData = new TezVertexData(vertexId);
-        JsonNode vertexRootNode = ThreadContextTez.readJsonNode(_urlFactory.getTezVertexURL(vertexId));
+        JsonNode vertexNameNode = vertex.path("otherinfo").get("vertexName");
+        String vertexName = (vertexNameNode==null)?"Reducer":vertexNameNode.getValueAsText();
 
-        if(!(vertexRootNode.path("primaryfilters").get("status").getElementValue(0).getTextValue()).contains((SUCCEEDED))){
-          break;
-        }
-
-        String vertexName = vertexNames.next();
         tezVertexData.setVertexName(vertexName);
         long startTime = 0l;
         long finishTime = 0l;
         long initialTime = 0l;
-        for(JsonNode event:vertexRootNode.path("events") ){
+        for(JsonNode event:vertex.path("events") ){
           //	System.out.println("vertexevents"+event);
           if("VERTEX_STARTED".equals(event.get("eventtype").getValueAsText())){
 
@@ -448,7 +433,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
         }
         long time [] =  { finishTime - startTime, 0, 0, startTime, finishTime };
         tezVertexData.setTime(time);
-        JsonNode groupsTez = vertexRootNode.path("otherinfo").path("counters").path("counterGroups");
+        JsonNode groupsTez = vertex.path("otherinfo").path("counters").path("counterGroups");
         TezCounterData holder = new TezCounterData();
 
         for (JsonNode group : groupsTez) {
@@ -457,36 +442,16 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
             Long counterValue = counter.get("counterValue").getLongValue();
             String groupName = group.get("counterGroupName").getValueAsText();
             holder.set(groupName, counterName, counterValue);
-            //  System.out.println("counter"+counterName+counterValue+groupName);
-
           }
         }
         tezVertexData.setCounter(holder);
-        JsonNode tasksNode = vertexRootNode.path("relatedentities").get("TEZ_TASK_ID");
-        if(tasksNode == null) {
-          logger.warn("Task ids are not available for vertex: " + vertexId);
-        }
-
-        //   System.out.println("taskNode"+tasksNode);
-        Iterator<JsonNode> iterator = (tasksNode == null)?null:tasksNode.getElements();
-        //   System.out.println("iterator"+iterator);
-        while(iterator != null && iterator.hasNext()){
-          JsonNode taskNode = iterator.next();
-          String taskId=taskNode.getValueAsText();
-          //     System.out.println("taskId is "+taskId);
-
-          JsonNode tezTaskRootNode = ThreadContextTez.readJsonNode(_urlFactory.getTezTaskIdURL(taskId));
-          //    System.out.println("task root node  "+tezTaskRootNode);
-
-          if(!(tezTaskRootNode.path("primaryfilters").get("status").getElementValue(0).getTextValue()).contains(SUCCEEDED)){
-            break;
-          }
-
-          //    System.out.println("task succeeded");
+        Iterator<JsonNode> taskRootNode = ThreadContextTez.readJsonNode( _urlFactory.getTezTaskIdURL(vertexId)).path("entities").getElements();
+        while(taskRootNode.hasNext()){
+          JsonNode taskNode = taskRootNode.next();
+          String taskId=taskNode.get("entity").getValueAsText();
 
           TezVertexTaskData mapReduceTaskData = new TezVertexTaskData(taskId,
-                  tezTaskRootNode.path("relatedentities").get("TEZ_TASK_ATTEMPT_ID").getValueAsText());
-          //    System.out.println("mapreduce data"+mapReduceTaskData);
+                  taskNode.path("otherinfo").get("successfulAttemptId").getValueAsText());
 
           if(vertexName.contains("Map")){
             mapperList.add(mapReduceTaskData);
@@ -496,7 +461,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
           }else{
             reducerList.add(mapReduceTaskData);
           }
-          for(JsonNode event:tezTaskRootNode.path("events") ){
+          for(JsonNode event:taskNode.path("events") ){
             if("TASK_STARTED".equals(event.get("eventtype").getValueAsText())){
               startTime=(event.get("timestamp").getValueAsLong());
             }
@@ -507,7 +472,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
           }
           long taskTime [] =  { finishTime - startTime, 0, 0, startTime, finishTime };
           mapReduceTaskData.setTime(taskTime);
-          JsonNode groupsTezTask = tezTaskRootNode.path("otherinfo").path("counters").path("counterGroups");
+          JsonNode groupsTezTask = taskNode.path("otherinfo").path("counters").path("counterGroups");
           TezCounterData holderTask = new TezCounterData();
           for (JsonNode group : groupsTezTask) {
             for (JsonNode counter : group.path("counters")) {
@@ -515,9 +480,6 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
               Long counterValue = counter.get("counterValue").getLongValue();
               String groupName = group.get("counterGroupName").getValueAsText();
               holderTask.set(groupName, counterName, counterValue);
-              //     System.out.println("counter task"+counterName+counterValue);
-
-
             }
           }
           mapReduceTaskData.setCounter(holderTask);

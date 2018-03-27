@@ -165,6 +165,8 @@ public class QuartzExecutorService implements IExecutorService {
             logger.error("job already exist with app_id: "+ analyticJob.getAppId());
         } catch (SchedulerException e) {
             throw new RuntimeException("Error while setting up scheduler : ", e);
+        } finally {
+            interval = 0;
         }
     }
 

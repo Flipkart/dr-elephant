@@ -76,6 +76,8 @@ class SparkFetcher(fetcherConfigurationData: FetcherConfigurationData)
     new SparkLogClient(hadoopConfiguration, sparkConf, eventLogUri)
   }
 
+  override def fetchConfData(job: AnalyticJob): SparkApplicationData = ???
+
   override def fetchData(analyticJob: AnalyticJob): SparkApplicationData = {
     doFetchData(analyticJob) match {
       case Success(data) => data

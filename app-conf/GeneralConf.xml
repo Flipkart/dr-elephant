@@ -39,7 +39,7 @@
   </property>
   <property>
     <name>drelephant.executor.service.class.name</name>
-    <value>com.linkedin.drelephant.executors.QuartzExecutorService</value>
+    <value>com.linkedin.drelephant.executors.ThreadPoolExecutorService</value>
     <description>Executor service (can be one of ThreadPoolExecutorService or QuartzExecutorService)</description>
   </property>
   <!--

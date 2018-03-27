@@ -16,6 +16,29 @@
 
 # --- !Ups
 
+CREATE TABLE failed_app_result (
+  id               INT(11)       NOT NULL AUTO_INCREMENT,
+  app_id           VARCHAR(50)   NOT NULL                   COMMENT 'The application id, e.g., application_1236543456321_1234567',
+  name             VARCHAR(100)  NOT NULL                   COMMENT 'The application name',
+  start_time       BIGINT        UNSIGNED NOT NULL          COMMENT 'The time in which application started',
+  finish_time      BIGINT        UNSIGNED NOT NULL          COMMENT 'The time in which application finished',
+  tracking_url     VARCHAR(255)  NOT NULL                   COMMENT 'The web URL that can be used to track the application',
+  job_type         VARCHAR(20)   NOT NULL                   COMMENT 'The Job Type e.g, Pig, Hive, Spark, HadoopJava',
+  scheduler        VARCHAR(20)                              COMMENT 'The scheduler which triggered the application',
+  job_name         VARCHAR(255)                             COMMENT 'The name of the job in the flow to which this app belongs',
+  job_exec_id      VARCHAR(800)                             COMMENT 'A unique reference to a specific execution of the job/action(job in the workflow). This should filter all applications (mapreduce/spark) triggered by the job for a particular execution.',
+  flow_exec_id     VARCHAR(255)                             COMMENT 'A unique reference to a specific flow execution. This should filter all applications fired by a particular flow execution. Note that if the scheduler supports sub-workflows, then this ID should be the super parent flow execution id that triggered the the applications and sub-workflows.',
+  job_def_id       VARCHAR(800)                             COMMENT 'A unique reference to the job in the entire flow independent of the execution. This should filter all the applications(mapreduce/spark) triggered by the job for all the historic executions of that job.',
+  flow_def_id      VARCHAR(800)                             COMMENT 'A unique reference to the entire flow independent of any execution. This should filter all the historic mr jobs belonging to the flow. Note that if your scheduler supports sub-workflows, then this ID should reference the super parent flow that triggered the all the jobs and sub-workflows.',
+  job_exec_url     VARCHAR(800)                             COMMENT 'A url to the job execution on the scheduler',
+  flow_exec_url    VARCHAR(800)                             COMMENT 'A url to the flow execution on the scheduler',
+  job_def_url      VARCHAR(800)                             COMMENT 'A url to the job definition on the scheduler',
+  flow_def_url     VARCHAR(800)                             COMMENT 'A url to the flow definition on the scheduler',
+  error            TEXT                                     COMMENT 'error stack trace',
+
+  PRIMARY KEY (id)
+);
+
 
 CREATE TABLE `check_point` (
   `id`              BIGINT          NOT NULL AUTO_INCREMENT,
@@ -210,6 +233,8 @@ DROP TABLE QRTZ_EXECUTIONS;
 DROP TABLE QRTZ_FIRED_TRIGGERS;
 
 DROP TABLE check_point;
+
+DROP TABLE failed_app_result;
 
 SET FOREIGN_KEY_CHECKS=1;
 

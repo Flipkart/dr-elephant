@@ -32,4 +32,7 @@ public interface ElephantFetcher<T extends HadoopApplicationData> {
    */
   public T fetchData(AnalyticJob job)
       throws Exception;
+
+  public T fetchConfData(AnalyticJob job);
+
 }

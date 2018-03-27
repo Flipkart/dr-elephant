@@ -203,6 +203,11 @@ public class MapReduceFSFetcherHadoop2 extends MapReduceFetcher {
   }
 
   @Override
+  public MapReduceApplicationData fetchConfData(AnalyticJob analyticJob) {
+    return new MapReduceApplicationData();
+  }
+
+  @Override
   public MapReduceApplicationData fetchData(AnalyticJob job) throws IOException {
     DataFiles files = getHistoryFiles(job);
     String confFile = files.getJobConfPath();

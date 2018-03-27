@@ -27,6 +27,8 @@ import java.util.List;
 import models.AppHeuristicResult;
 import models.AppHeuristicResultDetails;
 import models.AppResult;
+import models.FailedAppResult;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.log4j.Logger;
 
 
@@ -249,6 +251,40 @@ public class AnalyticJob implements Serializable {
     return this;
   }
 
+
+  public FailedAppResult getFailedAppResult(Exception e) throws Exception {
+
+    ElephantFetcher fetcher = ElephantContext.instance().getFetcherForApplicationType(getAppType());
+    HadoopApplicationData data = fetcher.fetchConfData(this);
+
+    JobType jobType = ElephantContext.instance().matchJobType(data);
+    String jobTypeName = jobType == null ? UNKNOWN_JOB_TYPE : jobType.getName();
+
+    AppResult result = new AppResult();
+    InfoExtractor.loadInfo(result, data);
+
+    FailedAppResult failedApp = new FailedAppResult();
+    failedApp.appId = Utils.truncateField(getAppId(), AppResult.ID_LIMIT, getAppId());
+    failedApp.startTime = getStartTime();
+    failedApp.finishTime = getFinishTime();
+    failedApp.name = Utils.truncateField(getName(), AppResult.APP_NAME_LIMIT, getAppId());
+    failedApp.trackingUrl = Utils.truncateField(getTrackingUrl(), AppResult.TRACKING_URL_LIMIT, getAppId());
+    failedApp.jobType = Utils.truncateField(jobTypeName, AppResult.JOBTYPE_LIMIT, getAppId());
+    failedApp.scheduler = result.scheduler;
+    failedApp.jobName =result.jobName;
+    failedApp.jobDefId = result.jobDefId;
+    failedApp.jobExecId = result.jobExecId;
+    failedApp.flowDefId = result.flowDefId;
+    failedApp.flowExecId = result.flowExecId;
+    failedApp.jobDefUrl = result.jobDefUrl;
+    failedApp.jobExecUrl = result.jobExecUrl;
+    failedApp.flowDefId =result.flowDefId;
+    failedApp.flowExecUrl = result.jobExecUrl;
+    failedApp.error = ExceptionUtils.getStackTrace(e);
+
+    return failedApp;
+  }
+
   /**
    * Returns the analysed AppResult that could be directly serialized into DB.
    *
@@ -360,6 +396,11 @@ public class AnalyticJob implements Serializable {
    * @return true if should retry, else false
    */
   public boolean isPrimaryPhaseRetry() {
-    return (_retries++) < _RETRY_LIMIT;
+    if(_retries < _RETRY_LIMIT) {
+      _retries++;
+      return true;
+    }
+    // Not incrementing _retries if condition fails so as to get correct value of total retries in case of QuartzScheduling.
+    return false;
   }
 }

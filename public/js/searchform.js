@@ -61,7 +61,7 @@ $(document).ready(function(){
       finishTimeEndDate.prop('disabled', true);
     } else if(flowExecId.val()) {
       jobId.prop('disabled', true);
-      jobDefId.prop('disabled', true);
+      jobDefId.prop('disabled', false);
       user.prop('disabled', true);
       queueName.prop('disabled', true);
       severity.prop('disabled', true);
@@ -74,7 +74,7 @@ $(document).ready(function(){
       finishTimeEndDate.prop('disabled', true);
     } else if (jobDefId.val()) {
       jobId.prop('disabled', true);
-      flowExecId.prop('disabled', true);
+      flowExecId.prop('disabled', false);
       user.prop('disabled', true);
       queueName.prop('disabled', true);
       severity.prop('disabled', true);

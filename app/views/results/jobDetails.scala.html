@@ -32,19 +32,19 @@
           <table class="list-group-item-text table-striped table-condensed">
             <tbody>
               <tr>
-                <td>Jobtracker:</td>
+                <td>Job tracker:</td>
                 <td><a href="@result.trackingUrl">@result.trackingUrl</a></td>
               </tr>
               @if(!result.jobExecUrl.isEmpty){
                 <tr>
                   <td>Job execution:</td>
-                  <td><a href="@result.jobExecUrl">@result.jobExecUrl</a></td>
+                  <td>@result.jobExecUrl</td>
                 </tr>
               }
               @if(!result.jobDefUrl.isEmpty){
                 <tr>
                   <td>Job definition:</td>
-                  <td><a href="@result.jobDefUrl">@result.jobDefUrl</a></td>
+                  <td>@result.jobDefUrl</td>
                 </tr>
               }
               @if(!result.flowExecUrl.isEmpty){
@@ -56,7 +56,7 @@
               @if(!result.flowDefUrl.isEmpty){
                 <tr>
                   <td>Flow definition:</td>
-                  <td><a href="@result.flowDefUrl">@result.flowDefUrl</a></td>
+                  <td>@result.flowDefUrl</td>
                 </tr>
               }
               @if(!result.jobDefId.isEmpty){

@@ -226,35 +226,46 @@ public class Application extends Controller {
     // Search and display job details when job id or flow execution url is provided.
     if (!appId.isEmpty()) {
       AppResult result = AppResult.find.select("*")
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS,
-              "*")
-          .where()
-          .idEq(appId).findUnique();
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS,
+                      "*")
+              .where()
+              .idEq(appId).findUnique();
       return ok(searchPage.render(null, jobDetails.render(result)));
-    } else if (Utils.isSet(partialFlowExecId)) {
-      IdUrlPair flowExecPair = bestSchedulerInfoMatchGivenPartialId(partialFlowExecId, AppResult.TABLE.FLOW_EXEC_ID);
-      List<AppResult> results = AppResult.find
-          .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_EXEC_ID)
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
-          .where()
-          .eq(AppResult.TABLE.FLOW_EXEC_ID, flowExecPair.getId())
-          .findList();
-      Map<IdUrlPair, List<AppResult>> map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.JOB_EXECUTION_ID);
-      return ok(searchPage.render(null, flowDetails.render(flowExecPair, map)));
     } else if (!jobDefId.isEmpty()) {
-      List<AppResult> results = AppResult.find
-          .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
-          .where()
-          .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
-          .findList();
-      Map<IdUrlPair, List<AppResult>> map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID);
-
+      List<AppResult> results;
+      Map<IdUrlPair, List<AppResult>> map;
+      if (Utils.isSet(partialFlowExecId)) {
+        results = AppResult.find
+                .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
+                .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
+                .where()
+                .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
+                .eq(AppResult.TABLE.JOB_EXEC_ID, partialFlowExecId)
+                .findList();
+      } else {
+        results = AppResult.find
+                .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
+                .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
+                .where()
+                .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
+                .findList();
+      }
+      map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID);
       String flowDefId = (results.isEmpty()) ? "" :  results.get(0).flowDefId;  // all results should have the same flow id
       IdUrlPair flowDefIdPair = new IdUrlPair(flowDefId, AppResult.TABLE.FLOW_DEF_URL);
-
       return ok(searchPage.render(null, flowDefinitionIdDetails.render(flowDefIdPair, map)));
+    } else if (Utils.isSet(partialFlowExecId)) {
+      List<AppResult> results;
+      IdUrlPair flowExecPair = bestSchedulerInfoMatchGivenPartialId(partialFlowExecId, AppResult.TABLE.FLOW_EXEC_ID);
+      results = AppResult.find
+              .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
+              .where()
+              .eq(AppResult.TABLE.FLOW_EXEC_ID, flowExecPair.getId())
+              .findList();
+      Map<IdUrlPair, List<AppResult>> map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.JOB_DEFINITION_ID);
+      return ok(searchPage.render(null, flowDetails.render(flowExecPair, map)));
     }
 
     // Prepare pagination of results

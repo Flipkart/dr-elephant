@@ -30,7 +30,7 @@
       @if(flowDefIdPair.getUrl.isEmpty){
         Flow Id: @flowDefIdPair.getId
       } else {
-        Flow Id: <a href=@flowDefIdPair.getUrl>@flowDefIdPair.getId</a>
+        Flow Id: @flowDefIdPair.getId
       }
     </h3>
   </div>
@@ -39,9 +39,9 @@
     @for( (flowExecPair, jobs) <- results) {
       <div class="list-group-item">
         @if(flowExecPair.getUrl.isEmpty){
-          Flow Execution ID: @flowExecPair.getId
+          Flow Execution URL: @flowExecPair.getId
         } else {
-          Flow Execution ID: <a href=@flowExecPair.getUrl>@flowExecPair.getId</a>
+          Flow Execution URL: <a href=@flowExecPair.getUrl>@flowExecPair.getURL</a>
         }
         <div class="list-group well-lg">
           @for(result <- jobs) {

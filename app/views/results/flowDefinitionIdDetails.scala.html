@@ -41,7 +41,7 @@
         @if(flowExecPair.getUrl.isEmpty){
           Flow Execution URL: @flowExecPair.getId
         } else {
-          Flow Execution URL: <a href=@flowExecPair.getUrl>@flowExecPair.getURL</a>
+          Flow Execution URL: <a href=@flowExecPair.getUrl>@flowExecPair.getUrl</a>
         }
         <div class="list-group well-lg">
           @for(result <- jobs) {

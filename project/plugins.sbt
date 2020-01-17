@@ -16,6 +16,11 @@
 // Comment to get more information during initialization
 logLevel := Level.Warn
 
+resolvers ++= Seq(
+"Flipkart snapshot repository" at "http://artifactory.fkinternal.com/artifactory/v1.0/artifacts/libs-snapshots-local",
+"Flipkart release repository" at "http://artifactory.fkinternal.com/artifactory/v1.0/artifacts/libs-release-local"
+)
+
 // The Typesafe repository
 resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
 

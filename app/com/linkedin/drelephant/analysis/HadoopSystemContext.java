@@ -26,14 +26,29 @@ public final class HadoopSystemContext {
 
   private static final String MAPREDUCE_FRAMEWORK_NAME_PROP = "mapreduce.framework.name";
   private static final String YARN = "yarn";
+  private static final String HADOOP_CONF = "HadoopConf.xml";
+
+  private static HadoopSystemContext INSTANCE;
+  private static Configuration hadoopConf;
+
+  public static HadoopSystemContext instance() {
+    if (INSTANCE == null) {
+      INSTANCE = new HadoopSystemContext();
+    }
+    return INSTANCE;
+  }
+
+  private HadoopSystemContext() {
+    hadoopConf = new Configuration();
+    hadoopConf.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
+  }
 
   /**
    * Detect if the current Hadoop environment is 2.x
    *
    * @return true if it is Hadoop 2 env, else false
    */
-  public static boolean isHadoop2Env() {
-    Configuration hadoopConf = new Configuration();
+  public boolean isHadoop2Env() {
     String hadoopVersion = hadoopConf.get(MAPREDUCE_FRAMEWORK_NAME_PROP);
     return hadoopVersion != null && hadoopVersion.equals(YARN);
   }
@@ -44,7 +59,7 @@ public final class HadoopSystemContext {
    * @param majorVersion the major version number of hadoop
    * @return true if we have a major version match else false
    */
-  public static boolean matchCurrentHadoopVersion(int majorVersion) {
+  public boolean matchCurrentHadoopVersion(int majorVersion) {
     return majorVersion == 2 && isHadoop2Env();
   }
 }

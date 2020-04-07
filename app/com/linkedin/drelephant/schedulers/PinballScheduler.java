@@ -9,7 +9,7 @@ import org.apache.log4j.Logger;
 /**
  * This class provides methods to load information specific to the Pinball scheduler.
  */
-public class PinballScheduler implements Scheduler {
+public class PinballScheduler extends Scheduler {
 
   private static final Logger logger = Logger.getLogger(PinballScheduler.class);
 
@@ -28,6 +28,7 @@ public class PinballScheduler implements Scheduler {
   private String _baseUrl;
 
   public PinballScheduler(String appId, Properties properties, SchedulerConfigurationData schedulerConfData) {
+    super(properties);
     _schedulerName = schedulerConfData.getSchedulerName();
     if (properties != null) {
       loadInfo(appId, properties);

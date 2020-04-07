@@ -18,37 +18,36 @@ package com.linkedin.drelephant.tez.fetchers;
 
 import com.linkedin.drelephant.analysis.AnalyticJob;
 import com.linkedin.drelephant.analysis.AnalyticJobGeneratorHadoop2;
-import com.linkedin.drelephant.tez.data.TezCounterData;
-import com.linkedin.drelephant.tez.data.TezDAGApplicationData;
-import com.linkedin.drelephant.tez.data.TezDAGData;
-import com.linkedin.drelephant.tez.data.TezVertexData;
-import com.linkedin.drelephant.tez.data.TezVertexTaskData;
-import com.linkedin.drelephant.math.Statistics;
 import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
+import com.linkedin.drelephant.math.Statistics;
+import com.linkedin.drelephant.tez.NoSuccessfulDAGFoundException;
+import com.linkedin.drelephant.tez.data.*;
 import com.linkedin.drelephant.util.Utils;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.node.ArrayNode;
+
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -57,14 +56,17 @@ import org.codehaus.jackson.map.ObjectMapper;
 public class TezDataFetcherHadoop2 extends TezDataFetcher {
   private static final Logger logger = Logger.getLogger(TezDataFetcherHadoop2.class);
 
+  private static final String HADOOP_CONF = "HadoopConf.xml";
+
   private URLFactory _urlFactory;
   private JSONFactory _jsonFactory;
   private String _timelinewebaddress;
   private String _jhistoryWebAddr;
   private String _resourcemanager;
-  private String _applicationHistoryAddress;
+  private String _applicationDAGAddress;
   private String _dagId;
   private static final String SUCCEEDED="SUCCEEDED";
+  private CloseableHttpClient httpclient;
   /**
    * Tez Fetcher uses Timeline server data in order to fetch the data. Tez DAG submits data to
    * the timeline server using events.
@@ -74,12 +76,15 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   public TezDataFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
-    AnalyticJobGeneratorHadoop2 analyticJobGeneratorHadoop2 = new AnalyticJobGeneratorHadoop2();
-    analyticJobGeneratorHadoop2.configure(new Configuration());
+    Configuration configuration = new Configuration();
+    configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
 
+    AnalyticJobGeneratorHadoop2 analyticJobGeneratorHadoop2 = new AnalyticJobGeneratorHadoop2();
+    analyticJobGeneratorHadoop2.configure(configuration);
     final String resourcemanager = analyticJobGeneratorHadoop2.getResourceManagerAddress();
-    final String timelineaddress = new Configuration().get("yarn.timeline-service.webapp.address");
-    final String jhistoryAddr = new Configuration().get("mapreduce.jobhistory.webapp.address");
+
+    final String jhistoryAddr = configuration.get("mapreduce.jobhistory.webapp.address");
+    final String timelineaddress = configuration.get("yarn.timeline-service.webapp.address");
 
     logger.info("Connecting to the job history server at " + timelineaddress + "...");
     _urlFactory = new URLFactory(timelineaddress);
@@ -90,7 +95,14 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     _jhistoryWebAddr = "http://" + jhistoryAddr + "/jobhistory/job/";
 
     _resourcemanager = String.format("http://%s/cluster/app/", resourcemanager);
-    _applicationHistoryAddress = String.format("http://%s/ws/v1/applicationhistory/apps/", timelineaddress);
+    _applicationDAGAddress = String.format("http://%s/ws/v1/timeline/TEZ_DAG_ID", timelineaddress);
+
+    PoolingHttpClientConnectionManager connManager
+            = new PoolingHttpClientConnectionManager();
+    connManager.setMaxTotal(5);
+    connManager.setDefaultMaxPerRoute(5);
+
+    httpclient = HttpClients.custom().setConnectionManager(connManager).build();
   }
 
   @Override
@@ -118,94 +130,75 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
    * The analysis is done at the application level and not DAG level.
    */
   @Override
-  public TezDAGApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+  public TezDAGApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException, NoSuccessfulDAGFoundException {
 
     String appId = analyticJob.getAppId();
-    String jobId = Utils.getJobIdFromApplicationId(appId);
     TezDAGApplicationData jobData = fetchConfData(analyticJob);
-    try {
-      int dagCount = getDagSubmittedCount(_urlFactory.getTezDagSubmittedCountURL(appId),jobData);
+   // try {
+      String dagId = getSucceededDagIdForAnApp(_urlFactory.getTezAppIdUrl(appId),jobData);
 
       //Right now it only supports DAGs which succeeded. It looks at DAG details to understand wether the application failed or succeded later in the code.
-      String state = "SUCCEEDED";
+      jobData.setSucceeded(true);
 
+      TezVertexData[] tezVertexData;
+      List<TezDAGData> tezDAGDataList = new ArrayList<TezDAGData>();
+      List<TezVertexTaskData> mapperList = new ArrayList<TezVertexTaskData>();
+      List<TezVertexTaskData> reducerList = new ArrayList<TezVertexTaskData>();
+      List<TezVertexTaskData> scopeTaskList = new ArrayList<TezVertexTaskData>();
+      List<TezVertexData> tezVertexList = new ArrayList<TezVertexData>();
 
-      if (state.equals(SUCCEEDED)) {
+      // Fetch task data
+      URL tezDagUrl = _urlFactory.getTezDAGURL(dagId);
+      TezCounterData jobCounter = _jsonFactory.getJobCounter(tezDagUrl);
+      jobData.setCounters(jobCounter);
+      TezDAGData tezDAGData = new TezDAGData(jobCounter);
+      tezDAGData.setCounter(jobCounter);
+      tezDAGData.setDagName(dagId);
+      tezDAGData.setTezDAGId(dagId);
+      tezDAGDataList.add(tezDAGData);
+      _jsonFactory.getTaskDataAll(tezVertexList, mapperList, reducerList, scopeTaskList, tezDagUrl);
+      tezVertexData = tezVertexList.toArray(new TezVertexData[0]);
+      tezVertexList.clear();
+      mapperList.clear();
+      reducerList.clear();
+      scopeTaskList.clear();
+      tezDAGData.setVertexData(tezVertexData);
 
-        jobData.setSucceeded(true);
-        // Fetch job counter
+      TezDAGData tezDAGDataArray[] = new TezDAGData[tezDAGDataList.size()];
+      jobData.setTezDAGData(tezDAGDataList.toArray(tezDAGDataArray));
 
-
-        TezVertexData[] tezVertexData=null;
-        String dagId = null;
-        List<TezDAGData> tezDAGDataList = new ArrayList<TezDAGData>();
-        List<TezVertexTaskData> mapperList = new ArrayList<TezVertexTaskData>();
-        List<TezVertexTaskData> reducerList = new ArrayList<TezVertexTaskData>();
-        List<TezVertexTaskData> scopeTaskList = new ArrayList<TezVertexTaskData>();
-        List<TezVertexData> tezVertexList = new ArrayList<TezVertexData>();
-        for(int i=1;i<=dagCount;i++){
-          // Fetch task data
-          URL taskListURL = _urlFactory.getTaskListURL(jobId);
-          TezCounterData jobCounter = _jsonFactory.getJobCounter(_urlFactory.getTezDAGURL(appId, i));
-          dagId = _urlFactory.getTezDAGId(appId,i);
-          jobData.setCounters(jobCounter);
-          TezDAGData tezDAGData = new TezDAGData(jobCounter);
-          tezDAGData.setCounter(jobCounter);
-          tezDAGData.setDagName(dagId);
-          tezDAGData.setTezDAGId(dagId);
-          tezDAGDataList.add(tezDAGData);
-          _jsonFactory.getTaskDataAll(tezVertexList, mapperList, reducerList,scopeTaskList,_urlFactory.getTezDAGURL(appId, i));
-          tezVertexData = tezVertexList.toArray(new TezVertexData[tezVertexList.size()]);
-          tezVertexList.clear();
-          mapperList.clear();
-          reducerList.clear();
-          scopeTaskList.clear();
-          tezDAGData.setVertexData(tezVertexData);
-        }
-        TezDAGData tezDAGDataArray[] = new TezDAGData[tezDAGDataList.size()];
-        jobData.setTezDAGData(tezDAGDataList.toArray(tezDAGDataArray));
-
-      }
-    } finally {
-      ThreadContextTez.updateAuthToken();
-    }
+   // }
+//    finally {
+//      ThreadContextTez.updateAuthToken();
+//    }
 
     return jobData;
   }
 
   /**
-   * This method looks at how many DAGs were submitted in the application and returns the DAG count
+   * This method returns DAG id of a Successful DAG for a given app id
    * @param url
    * @param jobData
    * @return
    * @throws IOException
    * @throws AuthenticationException
    */
-  private int getDagSubmittedCount(URL url,TezDAGApplicationData jobData) throws IOException,AuthenticationException{
-    List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
+  private String getSucceededDagIdForAnApp(URL url, TezDAGApplicationData jobData) throws IOException, AuthenticationException, NoSuccessfulDAGFoundException {
+    JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
 
-    JsonNode rootNode = ThreadContextTez.readJsonNode(url);
-    String diagnosticsInfo = rootNode.path("diagnosticsInfo").getValueAsText();
-    Long startedTime = (rootNode.path("startedTime").getLongValue());
-    Long finishedTime = (rootNode.path("finishedTime").getLongValue());
-    int dagCount = 0;
-    if(diagnosticsInfo!=null){
-      String dagTypes[] = diagnosticsInfo.replace("Session stats:", "").split(",");
+    ArrayNode entities = (ArrayNode) rootNode.get("entities");
+    Iterator<JsonNode> entitiesElements = entities.getElements();
 
-      jobData.setStartTime(startedTime);
-      jobData.setFinishTime(finishedTime);
-
-      for(String dagType:dagTypes){
-
-        if(dagType.contains("successfulDAGs") && Integer.parseInt(dagType.substring((dagType.indexOf("=")+1)).trim())==0)
-          throw new RuntimeException("No successfull DAG found");
-        dagCount += Integer.parseInt(dagType.substring((dagType.indexOf("=")+1)).trim());
-      }
+    if (entitiesElements.hasNext()) {
+      JsonNode entityNode = entitiesElements.next();
+      jobData.setStartTime(entityNode.get("otherinfo").get("startTime").getLongValue());
+      jobData.setFinishTime(entityNode.get("otherinfo").get("endTime").getLongValue());
+      return entityNode.get("entity").getValueAsText();
+    } else {
+      logger.error("No successfull DAG found");
+      throw new NoSuccessfulDAGFoundException("No successfull DAG found");
     }
-    return dagCount;
   }
-
-
 
 
   private URL getTaskCounterURL(String jobId, String taskId) throws MalformedURLException {
@@ -264,19 +257,16 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     private URL getTaskAttemptURL(String jobId, String taskId, String attemptId) throws MalformedURLException {
       return new URL(_restRoot + "/" + jobId + "/tasks/" + taskId + "/attempts/" + attemptId);
     }
-    private URL getTezDAGURL(String appId,int id) throws MalformedURLException {
-
-      String dagId = appId.replace("application","dag");
-      dagId =_tezRoot+"TEZ_VERTEX_ID?limit=9007199254740991&primaryFilter=TEZ_DAG_ID:"+dagId+"_"+id+"&secondaryFilter=status:SUCCEEDED";
-      return new URL(dagId);
+    private URL getTezDAGURL(String dagId) throws MalformedURLException {
+      return new URL(_tezRoot+"TEZ_VERTEX_ID?limit=9007199254740991&primaryFilter=TEZ_DAG_ID:"+dagId+"&secondaryFilter=status:SUCCEEDED");
     }
     private String getTezDAGId(String appId,int id) throws MalformedURLException {
       String dagId = appId.replace("application","dag");
       dagId =dagId+"_"+id;
       return (dagId);
     }
-    private URL getTezDagSubmittedCountURL(String appId) throws MalformedURLException{
-      return new URL(_applicationHistoryAddress+appId);
+    private URL getTezAppIdUrl(String appId) throws MalformedURLException{
+      return new URL(_tezRoot + "TEZ_DAG_ID?limit=9007199254740991&primaryFilter=applicationId:" + appId + "&secondaryFilter=status:SUCCEEDED");
     }
     private URL getTezTaskIdURL(String vertexId) throws MalformedURLException {
       String tezTaskIdURL = _tezRoot + "TEZ_TASK_ID?limit=9007199254740991&primaryFilter=TEZ_VERTEX_ID:" + vertexId + "&secondaryFilter=status:SUCCEEDED";
@@ -288,27 +278,27 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   private class JSONFactory {
 
     private long getStartTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       return rootNode.path("job").path("startTime").getValueAsLong();
     }
 
     private long getFinishTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       return rootNode.path("job").path("finishTime").getValueAsLong();
     }
 
     private long getSubmitTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       return rootNode.path("job").path("submitTime").getValueAsLong();
     }
 
     private String getState(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       return rootNode.path("job").path("state").getValueAsText();
     }
 
     private String getDiagnosticInfo(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       String diag = rootNode.path("job").path("diagnostics").getValueAsText();
       return diag;
     }
@@ -316,7 +306,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     private Properties getProperties(URL url) throws IOException, AuthenticationException {
       Properties jobConf = new Properties();
 
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       JsonNode configs = rootNode.path("otherinfo").get("config");
       Iterator<String> it = configs.getFieldNames();
 
@@ -341,7 +331,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     private TezCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
       TezCounterData holder = new TezCounterData();
 
-      JsonNode rootNodeTez = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNodeTez = ThreadContextTez.readJsonNode(url, httpclient);
       JsonNode groupsTez = rootNodeTez.path("otherinfo").path("counters").path("counterGroups");
       for (JsonNode group : groupsTez) {
         for (JsonNode counter : group.path("counters")) {
@@ -359,7 +349,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
     private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException {
 
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = ThreadContextTez.readJsonNode(url, httpclient);
       JsonNode taskAttempt = rootNode.path("taskAttempt");
 
       long startTime = taskAttempt.get("startTime").getLongValue();
@@ -393,7 +383,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
                                 List<TezVertexTaskData> reducerList,List<TezVertexTaskData> scopeTaskList,URL dagId) throws IOException,AuthenticationException {
       JsonNode rootNode = null;
       try{
-        rootNode = ThreadContextTez.readJsonNode(dagId);
+        rootNode = ThreadContextTez.readJsonNode(dagId, httpclient);
       }
       catch(FileNotFoundException e){
         return;
@@ -445,7 +435,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
           }
         }
         tezVertexData.setCounter(holder);
-        Iterator<JsonNode> taskRootNode = ThreadContextTez.readJsonNode( _urlFactory.getTezTaskIdURL(vertexId)).path("entities").getElements();
+        Iterator<JsonNode> taskRootNode = ThreadContextTez.readJsonNode( _urlFactory.getTezTaskIdURL(vertexId), httpclient).path("entities").getElements();
         while(taskRootNode.hasNext()){
           JsonNode taskNode = taskRootNode.next();
           String taskId=taskNode.get("entity").getValueAsText();
@@ -572,11 +562,24 @@ final class ThreadContextTez {
     return _LOCAL_DIAGNOSTIC_PATTERN.get().matcher(diagnosticInfo);
   }
 
-  public static JsonNode readJsonNode(URL url) throws IOException, AuthenticationException {
+  public static JsonNode readJsonNode(URL url, CloseableHttpClient httpClient) throws IOException, AuthenticationException {
+    InputStream inputStream = null;
+    CloseableHttpResponse response = null;
+    try {
+      HttpGet httpGet = new HttpGet(url.toString());
+      response = httpClient.execute(httpGet);
+      HttpEntity entity = response.getEntity();
+      inputStream = entity.getContent();
+      String result = IOUtils.toString(inputStream);
 
-    logger.info(url);
-    HttpURLConnection conn = _LOCAL_AUTH_URL.get().openConnection(url, _LOCAL_AUTH_TOKEN.get());
-    return _LOCAL_MAPPER.get().readTree(conn.getInputStream());
+      return  _LOCAL_MAPPER.get().readTree(result);
+    } finally {
+      if(inputStream != null)
+        inputStream.close();
+
+      if(response != null)
+        response.close();
+    }
   }
 
   public static void updateAuthToken() {

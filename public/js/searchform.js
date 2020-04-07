@@ -34,6 +34,7 @@ $(document).ready(function(){
   var finishTimeEndDate = $("#form-finished-time-end-date");
   var finishTimeBeginTimestamp = $("#form-finished-time-begin");
   var finishTimeEndTimestamp = $("#form-finished-time-end");
+  var orgSelection = $("#org-selection");
 
   finishTimeBeginDate.datepicker({
     autoclose: true,
@@ -60,7 +61,7 @@ $(document).ready(function(){
       finishTimeEndDate.prop('disabled', true);
     } else if(flowExecId.val()) {
       jobId.prop('disabled', true);
-      jobDefId.prop('disabled', true);
+      jobDefId.prop('disabled', false);
       user.prop('disabled', true);
       queueName.prop('disabled', true);
       severity.prop('disabled', true);
@@ -73,7 +74,7 @@ $(document).ready(function(){
       finishTimeEndDate.prop('disabled', true);
     } else if (jobDefId.val()) {
       jobId.prop('disabled', true);
-      flowExecId.prop('disabled', true);
+      flowExecId.prop('disabled', false);
       user.prop('disabled', true);
       queueName.prop('disabled', true);
       severity.prop('disabled', true);
@@ -124,6 +125,22 @@ $(document).ready(function(){
   jobtypeEnable.change(updateForm);
   severityEnable.change(updateForm);
   datetimeEnable.change(updateForm);
+
+
+  orgSelection.change(function() {
+      var org = $(this).val();
+      $.getJSON('/rest/orgtosuborgs?id=' + org, function(data) {
+            var select = document.getElementById("sub-org-selection");
+            $("#sub-org-selection option").remove();
+            data.forEach(function(d) {
+                var opt = document.createElement('option');
+                    opt.value = d.subOrg;
+                    opt.innerHTML = d.subOrg;
+                    select.appendChild(opt);
+            });
+
+        });
+  });
 
   formSubmit.click(function() {
 

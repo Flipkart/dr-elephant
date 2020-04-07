@@ -1,0 +1,99 @@
+@*
+* Copyright 2016 LinkedIn Corp.
+*
+* Licensed under the Apache License, Version 2.0 (the "License"); you may not
+* use this file except in compliance with the License. You may obtain a copy of
+* the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+* WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+* License for the specific language governing permissions and limitations under
+* the License.
+*@
+
+@(org: String, subOrg: String, finishedTimeBegin: Long, finishedTimeEnd: Long, orgAnalysisList: java.util.List[com.linkedin.drelephant.analysis.OrgAnalysis], criticalJobs: Long, severeJobs: Long)
+
+@import com.linkedin.drelephant.util.Utils;
+
+@if(orgAnalysisList != null && orgAnalysisList.nonEmpty) {
+@tags.panel(){ Org : <b>@org</b>} {
+<script src="@routes.Assets.at("assets/data-tables/js/jquery.dataTables.utility.js")" type="text/javascript"></script>
+<script src="@routes.Assets.at("assets/data-tables/js/jquery-1.12.4.js")" type="text/javascript"></script>
+<script src="@routes.Assets.at("assets/data-tables/js/jquery.dataTables.min.js")" type="text/javascript"></script>
+<div>
+
+    <hr>
+
+    <div class="jumbotron" style="background-color: #ffffff;border-style: inset;padding-bottom:0px;">
+        <div class="jumbotron" style="border-style: outset;padding-bottom:0px;padding-left:10px; padding-top:10px;margin-bottom:30px;">
+        <p>Sub Org : <b>@subOrg</b><br><br>
+           Analyzed all jobs and about <b>@orgAnalysisList.size()</b> jobs need to be checked.<br>
+           @if(severeJobs > 0) {About <b>@severeJobs</b> of them could use some tuning.<br>}
+           @if(criticalJobs > 0) {About <b>@criticalJobs</b> of them need some serious attention!}
+        </p>
+
+        </div>
+        <div class="table-responsive">
+          <table class="display table-hover" id="data-table">
+            <thead>
+                <tr>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">JOB DEFINITION ID<div id="tooltip-div"><span> Job definition id</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">SEVERITY<div id="tooltip-div"><span> Severity</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">SCORE<div id="tooltip-div"><span> Lower the score better the performance</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">JOB TYPE<div id="tooltip-div"><span> Type of the job</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">USER<div id="tooltip-div"><span> User who started the job</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">QUEUE<div id="tooltip-div"><span> Queue to which the job was submitted</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">SCHEDULER<div id="tooltip-div"><span> Scheduler that triggered the job</span></div></th>
+                    <th class="hasTooltip" style="min-width:600px; text-align: center;">JOB NAME<div id="tooltip-div"><span> Name of the job</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">JOB RUNS<div id="tooltip-div"><span> Total runs of the job</span></div></th>
+                    <th class="hasTooltip" style="min-width:200px; text-align: center;">RESOURCES USED<div id="tooltip-div"><span> Average resources used</span></div></th>
+                    <th class="hasTooltip" style="min-width:200px; text-align: center;">RESOURCES WASTED<div id="tooltip-div"><span> Average resources wasted</span></div></th>
+                    <th class="hasTooltip" style="min-width:200px; text-align: center;">TOTAL DELAY<div id="tooltip-div"><span> Average delay</span></div></th>
+                </tr>
+            </thead>
+
+            <tfoot>
+                <tr>
+                    <th>JOB DEFINITION ID</th>
+                    <th>SEVERITY</th>
+                    <th>SCORE</th>
+                    <th>JOB TYPE</th>
+                    <th>USER</th>
+                    <th>QUEUE</th>
+                    <th>SCHEDULER</th>
+                    <th>JOB NAME</th>
+                    <th>JOB RUNS</th>
+                    <th>RESOURCES USED</th>
+                    <th>RESOURCES WASTED</th>
+                    <th>TOTAL DELAY</th>
+                </tr>
+            </tfoot>
+
+            <tbody>
+                @for(orgAnalysis <- orgAnalysisList) {
+                    <tr>
+                        <td class="hasTooltip" style="min-width:150px; text-align: center;"><a href="/jobanalysis?job-analysis-job-def-id=@orgAnalysis.getJobDetails().getJobDefId()&finished-time-begin=@finishedTimeBegin&finished-time-end=@finishedTimeEnd" class="label label-@orgAnalysis.getSeverity().getBootstrapColor()">@orgAnalysis.getJobDetails().getJobDefId()<div id="tooltip-div"><span> Click to view details of job @orgAnalysis.getJobDetails().getJobDefId()</span></div></a></td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getSeverity().getText</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getScore()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getJobType()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getUserName()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getQueueName()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getScheduler()</td>
+                        <td style="min-width:600px; text-align: center;">@orgAnalysis.getJobDetails().getJobName()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getJobRuns()</td>
+                        <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(orgAnalysis.getJobDetails().getResourceUsed()).split("GB")(0))</td>
+                        <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(orgAnalysis.getJobDetails().getResourceWasted()).split("GB")(0))</td>
+                        <td style="min-width:200px; text-align: center;">@(Utils.getDurationBreakdown(orgAnalysis.getJobDetails().getTotalDelay()).split("Hours")(0))</td>
+                    </tr>
+                }
+            </tbody>
+            </table>
+            <br><br>
+        </div>
+    </div>
+</div>
+}
+}

@@ -195,6 +195,12 @@ public class InfoExtractor {
     result.jobName = scheduler.getJobName() != null ? Utils
       .truncateField(scheduler.getJobName(), AppResult.JOB_NAME_LIMIT, appId) : "";
 
+    result.organization = scheduler.getOrganization() != null ? Utils
+            .truncateField(scheduler.getOrganization(), AppResult.ORGANIZATION_LIMIT, appId) : "";
+
+    result.subOrganization = scheduler.getSubOrganization() != null ? Utils
+            .truncateField(scheduler.getSubOrganization(), AppResult.SUB_ORGANIZATION_LIMIT, appId) : "";
+
     result.jobDefId = Utils.truncateField(scheduler.getJobDefId(), AppResult.URL_LEN_LIMIT, appId);
     result.jobDefUrl = scheduler.getJobDefUrl() != null ? Utils
       .truncateField(scheduler.getJobDefUrl(), AppResult.URL_LEN_LIMIT, appId) : "";

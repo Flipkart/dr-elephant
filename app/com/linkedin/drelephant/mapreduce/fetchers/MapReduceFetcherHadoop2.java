@@ -17,16 +17,28 @@
 package com.linkedin.drelephant.mapreduce.fetchers;
 
 import com.linkedin.drelephant.analysis.AnalyticJob;
+import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceApplicationData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceTaskData;
 import com.linkedin.drelephant.math.Statistics;
-import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
 import com.linkedin.drelephant.util.Utils;
+import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
+import org.apache.hadoop.security.authentication.client.AuthenticationException;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.log4j.Logger;
+import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.IOException;
-import java.lang.Integer;
-import java.net.HttpURLConnection;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -38,13 +50,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
-import org.apache.hadoop.security.authentication.client.AuthenticationException;
-import org.apache.log4j.Logger;
-import org.codehaus.jackson.JsonNode;
-import org.codehaus.jackson.map.ObjectMapper;
-
 
 /**
  * This class implements the Fetcher for MapReduce Applications on Hadoop2
@@ -53,14 +58,20 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   private static final Logger logger = Logger.getLogger(MapReduceFetcherHadoop2.class);
   // We provide one minute job fetch delay due to the job sending lag from AM/NM to JobHistoryServer HDFS
 
+  private static final String HADOOP_CONF = "HadoopConf.xml";
+
   private URLFactory _urlFactory;
   private JSONFactory _jsonFactory;
   private String _jhistoryWebAddr;
+  private CloseableHttpClient httpclient;
 
   public MapReduceFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
-    final String jhistoryAddr = new Configuration().get("mapreduce.jobhistory.webapp.address");
+    Configuration configuration = new Configuration();
+    configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
+    final String jhistoryAddr = configuration.get("mapreduce.jobhistory.webapp.address");
+
 
     logger.info("Connecting to the job history server at " + jhistoryAddr + "...");
     _urlFactory = new URLFactory(jhistoryAddr);
@@ -68,6 +79,13 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
 
     _jsonFactory = new JSONFactory();
     _jhistoryWebAddr = "http://" + jhistoryAddr + "/jobhistory/job/";
+
+    PoolingHttpClientConnectionManager connManager
+            = new PoolingHttpClientConnectionManager();
+    connManager.setMaxTotal(5);
+    connManager.setDefaultMaxPerRoute(5);
+
+    httpclient = HttpClients.custom().setConnectionManager(connManager).build();
   }
 
   @Override
@@ -90,19 +108,20 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   }
 
   @Override
-  public MapReduceApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+  public MapReduceApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException, InterruptedException {
 
     String appId = analyticJob.getAppId();
     String jobId = Utils.getJobIdFromApplicationId(appId);
     MapReduceApplicationData jobData = fetchConfData(analyticJob);
 
-    try {
+   // try {
       URL jobURL = _urlFactory.getJobURL(jobId);
-      String state = _jsonFactory.getState(jobURL);
+      JsonNode job = _jsonFactory.getJobDetails(jobURL);
+      String state = job.path("job").path("state").getValueAsText();
 
-      jobData.setSubmitTime(_jsonFactory.getSubmitTime(jobURL));
-      jobData.setStartTime(_jsonFactory.getStartTime(jobURL));
-      jobData.setFinishTime(_jsonFactory.getFinishTime(jobURL));
+      jobData.setSubmitTime(job.path("job").path("submitTime").getValueAsLong());
+      jobData.setStartTime(job.path("job").path("startTime").getValueAsLong());
+      jobData.setFinishTime(job.path("job").path("finishTime").getValueAsLong());
 
       if (state.equals("SUCCEEDED")) {
 
@@ -150,9 +169,10 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
         // Should not reach here
         throw new RuntimeException("Job state not supported. Should be either SUCCEEDED or FAILED");
       }
-    } finally {
-      ThreadContextMR2.updateAuthToken();
-    }
+    //}
+//    finally {
+//      ThreadContextMR2.updateAuthToken();
+//    }
 
     return jobData;
   }
@@ -224,28 +244,13 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
 
   private class JSONFactory {
 
-    private long getStartTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
-      return rootNode.path("job").path("startTime").getValueAsLong();
-    }
-
-    private long getFinishTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
-      return rootNode.path("job").path("finishTime").getValueAsLong();
-    }
-
-    private long getSubmitTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
-      return rootNode.path("job").path("submitTime").getValueAsLong();
-    }
-
-    private String getState(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
-      return rootNode.path("job").path("state").getValueAsText();
+    private JsonNode getJobDetails(URL url) throws IOException, AuthenticationException {
+      JsonNode jsonNode = ThreadContextMR2.readJsonNode(url, httpclient);
+      return jsonNode;
     }
 
     private String getDiagnosticInfo(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(url, httpclient);
       String diag = rootNode.path("job").path("diagnostics").getValueAsText();
       return diag;
     }
@@ -253,7 +258,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     private Properties getProperties(URL url) throws IOException, AuthenticationException {
       Properties jobConf = new Properties();
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(url, httpclient);
       JsonNode configs = rootNode.path("conf").path("property");
 
       for (JsonNode conf : configs) {
@@ -267,7 +272,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     private MapReduceCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
       MapReduceCounterData holder = new MapReduceCounterData();
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(url, httpclient);
       JsonNode groups = rootNode.path("jobCounters").path("counterGroup");
 
       for (JsonNode group : groups) {
@@ -282,7 +287,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     }
 
     private MapReduceCounterData getTaskCounter(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(url, httpclient);
       JsonNode groups = rootNode.path("jobTaskCounters").path("taskCounterGroup");
       MapReduceCounterData holder = new MapReduceCounterData();
 
@@ -299,7 +304,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
 
     private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException {
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(url, httpclient);
       JsonNode taskAttempt = rootNode.path("taskAttempt");
 
       long startTime = taskAttempt.get("startTime").getLongValue();
@@ -320,9 +325,9 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     }
 
     private void getTaskDataAll(URL url, String jobId, List<MapReduceTaskData> mapperList,
-        List<MapReduceTaskData> reducerList) throws IOException, AuthenticationException {
+        List<MapReduceTaskData> reducerList) throws IOException, AuthenticationException, InterruptedException {
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(url, httpclient);
       JsonNode tasks = rootNode.path("tasks").path("task");
 
       for (JsonNode task : tasks) {
@@ -381,7 +386,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     }
 
     private JsonNode getTaskFirstFailedAttempt(URL taskAllAttemptsUrl) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(taskAllAttemptsUrl);
+      JsonNode rootNode = ThreadContextMR2.readJsonNode(taskAllAttemptsUrl, httpclient);
       long firstAttemptFinishTime = Long.MAX_VALUE;
       JsonNode firstAttempt = null;
       JsonNode taskAttempts = rootNode.path("taskAttempts").path("taskAttempt");
@@ -432,8 +437,8 @@ final class ThreadContextMR2 {
           // Random an interval for each executor to avoid update token at the same time
           _LOCAL_UPDATE_INTERVAL.set(Statistics.MINUTE_IN_MS * 30 + new Random().nextLong()
               % (3 * Statistics.MINUTE_IN_MS));
-          logger.info("Executor " + _LOCAL_THREAD_ID.get() + " update interval " + _LOCAL_UPDATE_INTERVAL.get() * 1.0
-              / Statistics.MINUTE_IN_MS);
+//          logger.info("Executor " + _LOCAL_THREAD_ID.get() + " update interval " + _LOCAL_UPDATE_INTERVAL.get() * 1.0
+//              / Statistics.MINUTE_IN_MS);
           return new AuthenticatedURL.Token();
         }
       };
@@ -460,9 +465,24 @@ final class ThreadContextMR2 {
     return _LOCAL_DIAGNOSTIC_PATTERN.get().matcher(diagnosticInfo);
   }
 
-  public static JsonNode readJsonNode(URL url) throws IOException, AuthenticationException {
-    HttpURLConnection conn = _LOCAL_AUTH_URL.get().openConnection(url, _LOCAL_AUTH_TOKEN.get());
-    return _LOCAL_MAPPER.get().readTree(conn.getInputStream());
+  public static JsonNode readJsonNode(URL url, CloseableHttpClient httpClient) throws IOException, AuthenticationException {
+    InputStream inputStream = null;
+    CloseableHttpResponse response = null;
+    try {
+      HttpGet httpGet = new HttpGet(url.toString());
+      response = httpClient.execute(httpGet);
+      HttpEntity entity = response.getEntity();
+      inputStream = entity.getContent();
+      String result = IOUtils.toString(inputStream);
+
+      return  _LOCAL_MAPPER.get().readTree(result);
+    } finally {
+      if(inputStream != null)
+        inputStream.close();
+
+      if(response != null)
+        response.close();
+    }
   }
 
   public static void updateAuthToken() {

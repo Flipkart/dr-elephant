@@ -26,7 +26,7 @@ import org.apache.log4j.Logger;
 /**
  * This class provides methods to load information specific to the Airflow scheduler.
  */
-public class AirflowScheduler implements Scheduler {
+public class AirflowScheduler extends Scheduler {
 
   private static final Logger logger = Logger.getLogger(AirflowScheduler.class);
 
@@ -48,6 +48,7 @@ public class AirflowScheduler implements Scheduler {
 
 
   public AirflowScheduler(String appId, Properties properties, SchedulerConfigurationData schedulerConfData) {
+    super(properties);
     _schedulerName = schedulerConfData.getSchedulerName();
     _baseUrl = schedulerConfData.getParamMap().get(AIRFLOW_BASE_URL_PARAM_NAME);
     if (_baseUrl == null) {
@@ -134,4 +135,14 @@ public class AirflowScheduler implements Scheduler {
 
   @Override
   public String getJobName() { return _taskId; }
+
+  @Override
+  public String getOrganization() {
+    return null;
+  }
+
+  @Override
+  public String getSubOrganization() {
+    return null;
+  }
 }

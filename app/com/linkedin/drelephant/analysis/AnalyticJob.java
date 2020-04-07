@@ -40,8 +40,8 @@ public class AnalyticJob implements Serializable {
   private static final Logger logger = Logger.getLogger(AnalyticJob.class);
 
   private static final String UNKNOWN_JOB_TYPE = "Unknown";   // The default job type when the data matches nothing.
-  private static final int _RETRY_LIMIT = 3;                  // Number of times a job needs to be tried before going into second retry queue
-  private static final int _SECOND_RETRY_LIMIT = 5;           // Number of times a job needs to be tried before dropping
+  private static final int _RETRY_LIMIT = 1;                  // Number of times a job needs to be tried before going into second retry queue
+  private static final int _SECOND_RETRY_LIMIT = 1;           // Number of times a job needs to be tried before dropping
   private static final String EXCLUDE_JOBTYPE = "exclude_jobtypes_filter"; // excluded Job Types for heuristic
 
 

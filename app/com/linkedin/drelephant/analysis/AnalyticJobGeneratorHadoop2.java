@@ -22,10 +22,8 @@ import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.math.Statistics;
 import com.linkedin.drelephant.security.HadoopSecurity;
+import com.linkedin.drelephant.tez.NoSuccessfulDAGFoundException;
 import controllers.MetricsController;
-import java.io.IOException;
-import java.net.URL;
-import java.util.*;
 import models.AppResult;
 import models.CheckPoint;
 import models.FailedAppResult;
@@ -36,6 +34,13 @@ import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
+
+import java.io.IOException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 
 
 /**
@@ -227,6 +232,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
       logger.info(ExceptionUtils.getStackTrace(e));
       Thread.currentThread().interrupt();
 
+    } catch (NoSuccessfulDAGFoundException e) {
+      logger.error("No successful DAG found for: " + analyticJob.getAppId());
     } catch (Exception e) {
       logger.error(e.getMessage());
       logger.error(ExceptionUtils.getStackTrace(e));

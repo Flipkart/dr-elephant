@@ -37,6 +37,8 @@
 
     <link rel='stylesheet' href='@routes.Assets.at("assets/bootstrap/css/bootstrap.min.css")'>
     <link rel='stylesheet' href='@routes.Assets.at("css/main.css")'>
+    <link rel='stylesheet' href='@routes.Assets.at("assets/data-tables/css/jquery.dataTables.min.css")'>
+    <link rel='stylesheet' href='@routes.Assets.at("assets/data-tables/css/jquery.dataTables.utility.css")'>
     <link rel='stylesheet' href='@routes.Assets.at("assets/bootstrap-datepicker/css/datepicker.css")'>
 
   </head>
@@ -63,6 +65,8 @@
             <li@if(page.equals("compare")){ class="active"}><a href="/compare">Compare</a></li>
             <li@if(page.equals("flowhistory")){ class="active"}><a href="/flowhistory">Flow History</a></li>
             <li@if(page.equals("jobhistory")){ class="active"}><a href="/jobhistory">Job History</a></li>
+            <li@if(page.equals("organalysis")){ class="active"}><a href="/organalysis">Org Analysis</a></li>
+            <li@if(page.equals("jobanalysis")){ class="active"}><a href="/jobanalysis">Job Analysis</a></li>
             <li@if(page.equals("help")){ class="active"}><a href="/help">Help</a></li>
           </ul>
         </div>

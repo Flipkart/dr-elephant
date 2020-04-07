@@ -28,15 +28,15 @@
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.URL</name>
-        <value>jdbc:mysql://10.33.233.193:3306/TT</value>
+        <value>jdbc:mysql://localhost:3306/drelephant</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.user</name>
-        <value>dr</value>
+        <value>root</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.password</name>
-        <value>dr</value>
+        <value>password</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.maxConnections</name>

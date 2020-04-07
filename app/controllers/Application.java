@@ -16,32 +16,20 @@
 
 package controllers;
 
+import com.avaje.ebean.Ebean;
 import com.avaje.ebean.ExpressionList;
 import com.avaje.ebean.Query;
-
+import com.avaje.ebean.SqlRow;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.linkedin.drelephant.ElephantContext;
-import com.linkedin.drelephant.analysis.Metrics;
-import com.linkedin.drelephant.analysis.Severity;
+import com.linkedin.drelephant.analysis.*;
 import com.linkedin.drelephant.util.Utils;
-
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-
 import models.AppHeuristicResult;
 import models.AppResult;
-
 import org.apache.commons.collections.map.ListOrderedMap;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.message.BasicNameValuePair;
@@ -53,23 +41,19 @@ import play.libs.Json;
 import play.mvc.Controller;
 import play.mvc.Result;
 import views.html.help.metrics.helpRuntime;
-import views.html.help.metrics.helpWaittime;
 import views.html.help.metrics.helpUsedResources;
+import views.html.help.metrics.helpWaittime;
 import views.html.help.metrics.helpWastedResources;
 import views.html.index;
-import views.html.page.comparePage;
-import views.html.page.flowHistoryPage;
-import views.html.page.helpPage;
-import views.html.page.homePage;
-import views.html.page.jobHistoryPage;
-import views.html.page.searchPage;
+import views.html.page.*;
 import views.html.results.*;
 
-import views.html.page.oldFlowHistoryPage;
-import views.html.page.oldJobHistoryPage;
-import views.html.page.oldHelpPage;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
-import com.google.gson.*;
+import static java.lang.StrictMath.max;
+import static java.lang.StrictMath.min;
 
 
 public class Application extends Controller {
@@ -83,12 +67,18 @@ public class Application extends Controller {
   private static final int JOB_HISTORY_LIMIT = 5000;          // Set to avoid memory error.
   private static final int MAX_HISTORY_LIMIT = 15;            // Upper limit on the number of executions to display
   private static final int STAGE_LIMIT = 25;                  // Upper limit on the number of stages to display
+  private static final int MAX_VALUE = 4;                     // Upper limit for normalization of score
+  private static final int MIN_VALUE = 1;                     // Lower limit for normalization of score
+
 
   // Form and Rest parameters
   public static final String APP_ID = "id";
   public static final String FLOW_DEF_ID = "flow-def-id";
   public static final String FLOW_EXEC_ID = "flow-exec-id";
   public static final String JOB_DEF_ID = "job-def-id";
+  public static final String JOB_ANALYSIS_JOB_DEF_ID = "job-analysis-job-def-id";
+  public static final String ORG = "org-analysis-org";
+  public static final String SUB_ORG = "org-analysis-sub_org";
   public static final String USERNAME = "username";
   public static final String QUEUE_NAME = "queue-name";
   public static final String SEVERITY = "severity";
@@ -236,35 +226,46 @@ public class Application extends Controller {
     // Search and display job details when job id or flow execution url is provided.
     if (!appId.isEmpty()) {
       AppResult result = AppResult.find.select("*")
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS,
-              "*")
-          .where()
-          .idEq(appId).findUnique();
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS,
+                      "*")
+              .where()
+              .idEq(appId).findUnique();
       return ok(searchPage.render(null, jobDetails.render(result)));
-    } else if (Utils.isSet(partialFlowExecId)) {
-      IdUrlPair flowExecPair = bestSchedulerInfoMatchGivenPartialId(partialFlowExecId, AppResult.TABLE.FLOW_EXEC_ID);
-      List<AppResult> results = AppResult.find
-          .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_EXEC_ID)
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
-          .where()
-          .eq(AppResult.TABLE.FLOW_EXEC_ID, flowExecPair.getId())
-          .findList();
-      Map<IdUrlPair, List<AppResult>> map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.JOB_EXECUTION_ID);
-      return ok(searchPage.render(null, flowDetails.render(flowExecPair, map)));
     } else if (!jobDefId.isEmpty()) {
-      List<AppResult> results = AppResult.find
-          .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
-          .where()
-          .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
-          .findList();
-      Map<IdUrlPair, List<AppResult>> map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID);
-
+      List<AppResult> results;
+      Map<IdUrlPair, List<AppResult>> map;
+      if (Utils.isSet(partialFlowExecId)) {
+        results = AppResult.find
+                .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
+                .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
+                .where()
+                .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
+                .eq(AppResult.TABLE.JOB_EXEC_ID, partialFlowExecId)
+                .findList();
+      } else {
+        results = AppResult.find
+                .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
+                .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
+                .where()
+                .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
+                .findList();
+      }
+      map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID);
       String flowDefId = (results.isEmpty()) ? "" :  results.get(0).flowDefId;  // all results should have the same flow id
       IdUrlPair flowDefIdPair = new IdUrlPair(flowDefId, AppResult.TABLE.FLOW_DEF_URL);
-
       return ok(searchPage.render(null, flowDefinitionIdDetails.render(flowDefIdPair, map)));
+    } else if (Utils.isSet(partialFlowExecId)) {
+      List<AppResult> results;
+      IdUrlPair flowExecPair = bestSchedulerInfoMatchGivenPartialId(partialFlowExecId, AppResult.TABLE.FLOW_EXEC_ID);
+      results = AppResult.find
+              .select(AppResult.getSearchFields() + "," + AppResult.TABLE.JOB_DEF_ID)
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, AppHeuristicResult.getSearchFields())
+              .where()
+              .eq(AppResult.TABLE.FLOW_EXEC_ID, flowExecPair.getId())
+              .findList();
+      Map<IdUrlPair, List<AppResult>> map = ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.JOB_DEFINITION_ID);
+      return ok(searchPage.render(null, flowDetails.render(flowExecPair, map)));
     }
 
     // Prepare pagination of results
@@ -655,6 +656,194 @@ public class Application extends Controller {
   }
 
   /**
+   * @param score score
+   * @param maxScore maximum score
+   * @param minScore minimum scaore
+   * @return normalized value of score
+   */
+  private static long normalize(float score, float maxScore, float minScore) {
+
+    return  (long) ((MAX_VALUE-MIN_VALUE) / (maxScore-minScore) * (score-maxScore) + MAX_VALUE);
+  }
+
+  /**
+   * Returns the job analysis.
+   *
+   * @return The job analysis page.
+   */
+  public static Result jobAnalysis() {
+
+    DynamicForm form = Form.form().bindFromRequest(request());
+    String jobDefId = form.get(JOB_ANALYSIS_JOB_DEF_ID);
+    jobDefId = (jobDefId != null) ? jobDefId.trim() : null;
+
+    long finishedTimeBegin = Utils.isSet(form.get(FINISHED_TIME_BEGIN)) ? Long.parseLong(form.get(FINISHED_TIME_BEGIN)) : Long.MIN_VALUE;
+    long finishedTimeEnd = Utils.isSet(form.get(FINISHED_TIME_END)) ? Long.parseLong(form.get(FINISHED_TIME_END)) : Long.MAX_VALUE;
+
+    if (!Utils.isSet(jobDefId)) {
+      return ok(jobAnalysisPage.render(jobDefId, finishedTimeBegin, finishedTimeEnd,
+              jobAnalysisResults.render(null, null, null, null)));
+    }
+
+    //Query to get details of heuristics under the corresponding job
+    String sql = "select table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score, avg(critical_severity) as critical_severity, avg(severe_severity) as severe_severity, avg(moderate_severity) as moderate_severity from\n" +
+            "(select a.job_def_id, a.job_exec_id, b.heuristic_name, sum(b.score) as heuristic_score, sum(CASE WHEN b.severity = 4 then 1 ELSE 0 END) as critical_severity, sum(CASE WHEN b.severity = 3 then 1 ELSE 0 END) as severe_severity, sum(CASE WHEN b.severity = 2 then 1 ELSE 0 END) as moderate_severity from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where a.job_def_id = :job_def_id and a.finish_time>= :finished_time_begin and a.finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name) as table1 \n" +
+            "group by table1.job_def_id, table1.heuristic_name having heuristic_score>0";
+
+    List<SqlRow> list = Ebean.createSqlQuery(sql)
+            .setParameter("job_def_id", jobDefId)
+            .setParameter("finished_time_begin", finishedTimeBegin)
+            .setParameter("finished_time_end", finishedTimeEnd)
+            .findList();
+
+    long maxScore = 0, minScore =0;
+    ArrayList<HeuristicDetails> heuristicDetailsList= new ArrayList<HeuristicDetails>();
+    for (SqlRow row : list) {
+      HeuristicDetails heuristicDetails = new HeuristicDetails(row.getString("heuristic_name"), row.getLong("heuristic_score"),
+              row.getInteger("critical_severity"), row.getInteger("severe_severity"), row.getInteger("moderate_severity"));
+
+      //getting max and min heuristic score
+      maxScore = max(maxScore, heuristicDetails.getScore());
+      minScore = min(minScore, heuristicDetails.getScore());
+
+      heuristicDetailsList.add(heuristicDetails);
+    }
+
+    Iterator<HeuristicDetails> heuristicDetailsListIterator = heuristicDetailsList.iterator();
+
+    List<JobAnalysis> jobAnalysisList = new LinkedList<JobAnalysis>();
+    HeuristicDetails heuristicDetails;
+    long normalizedScore;
+    int criticalHeuristics = 0,  severeHeuristics = 0;
+    while(heuristicDetailsListIterator.hasNext()) {
+      JobAnalysis jobAnalysis;
+      heuristicDetails = heuristicDetailsListIterator.next();
+      //getting the normalized value of heuristic score and setting heuristic severity as per calculated normalized heuristic score
+      normalizedScore =  normalize(heuristicDetails.getScore(), maxScore, minScore);
+      if(normalizedScore == 4) {
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.CRITICAL);
+        criticalHeuristics = criticalHeuristics + 1;
+      } else if(normalizedScore == 3) {
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.SEVERE);
+        severeHeuristics = severeHeuristics + 1;
+      } else if(normalizedScore == 2) {
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.MODERATE);
+      } else {
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.LOW);
+      }
+      jobAnalysisList.add(jobAnalysis);
+    }
+
+    return ok(jobAnalysisPage.render(jobDefId, finishedTimeBegin, finishedTimeEnd,
+            jobAnalysisResults.render(jobAnalysisList, jobAnalysisList.size(), criticalHeuristics, severeHeuristics)));
+  }
+
+  /**
+   * Returns the org analysis.
+   *
+   * @return The org analysis page.
+   */
+  public static Result orgAnalysis() {
+
+    DynamicForm form = Form.form().bindFromRequest(request());
+    String org = form.get(ORG);
+    String subOrg = form.get(SUB_ORG);
+    org = (org != null) ? org.trim() : null;
+    subOrg = (subOrg != null) ? subOrg.trim() : null;
+
+    long finishedTimeBegin = Utils.isSet(form.get(FINISHED_TIME_BEGIN)) ? Long.parseLong(form.get(FINISHED_TIME_BEGIN)) : Long.MIN_VALUE;
+    long finishedTimeEnd = Utils.isSet(form.get(FINISHED_TIME_END)) ? Long.parseLong(form.get(FINISHED_TIME_END)) : Long.MAX_VALUE;
+
+
+    if (!Utils.isSet(org)) {
+      return ok(orgAnalysisPage.render(org, subOrg, finishedTimeBegin, finishedTimeEnd,
+              orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, null, null, null)));
+    }
+
+    //Query to get details of jobs under the corresponding org and sub-org
+    String sql = "SELECT Count(a.job_def_id)    AS job_runs, \n" +
+            "               a.job_def_id, \n" +
+            "               a.organization, \n" +
+            "               a.sub_organization, \n" +
+            "               a.job_type, \n" +
+            "               a.scheduler, \n" +
+            "               a.username, \n" +
+            "               a.job_name, \n" +
+            "               a.queue_name, \n" +
+            "               Avg(a.score)           AS score, \n" +
+            "               Avg(a.resource_used)   AS resource_used, \n" +
+            "               Avg(a.resource_wasted) AS resource_wasted, \n" +
+            "               Avg(a.total_delay)     AS total_delay \n" +
+            "        FROM   (SELECT job_def_id, \n" +
+            "                       organization, \n" +
+            "                       sub_organization, \n" +
+            "                       job_type, \n" +
+            "                       queue_name, \n" +
+            "                       scheduler, \n" +
+            "                       username, \n" +
+            "                       job_name, \n" +
+            "                       Sum(score)           AS score, \n" +
+            "                       Sum(resource_used)   AS resource_used, \n" +
+            "                       Sum(resource_wasted) AS resource_wasted, \n" +
+            "                       Sum(total_delay)     AS total_delay \n" +
+            "                FROM   yarn_app_result \n" +
+            "                WHERE  organization = :org \n" +
+            "                       AND sub_organization = :sub_org \n" +
+            "                       AND finish_time >= :finished_time_begin \n" +
+            "                       AND finish_time <= :finished_time_end \n" +
+            "                GROUP  BY job_def_id, \n" +
+            "                          job_exec_id) AS a \n" +
+            "        GROUP  BY job_def_id \n" +
+            "        HAVING score > 0";
+
+    List<SqlRow> list = Ebean.createSqlQuery(sql)
+            .setParameter("org", org)
+            .setParameter("sub_org", subOrg)
+            .setParameter("finished_time_begin", finishedTimeBegin)
+            .setParameter("finished_time_end", finishedTimeEnd)
+            .findList();
+
+    long maxScore = 0, minScore = 0;
+    List<JobDetails> jobDetailsList = new LinkedList<JobDetails>();
+    for (SqlRow row : list) {
+      JobDetails jobDetails = new JobDetails(row.getString("job_def_id"), row.getString("job_name"),
+              row.getString("job_type"), row.getString("username"), row.getString("queue_name"),
+              row.getString("scheduler"), row.getLong("score"), row.getInteger("job_runs"),
+              row.getLong("resource_used"), row.getLong("resource_wasted"), row.getLong("total_delay"));
+
+      //getting max and min job score
+      maxScore = max(maxScore, jobDetails.getScore());
+      minScore = min(minScore, jobDetails.getScore());
+
+      jobDetailsList.add(jobDetails);
+    }
+
+    List<OrgAnalysis> orgAnalysisList = new LinkedList<OrgAnalysis>();
+    long normalizedScore, criticalJobs = 0, severeJobs = 0;
+    for(JobDetails jobDetails: jobDetailsList) {
+      OrgAnalysis orgAnalysis;
+      //getting the normalized value of job score and setting job severity as per calculated normalized job score
+      normalizedScore =  normalize(jobDetails.getScore(), maxScore, minScore);
+      if(normalizedScore == 4) {
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.CRITICAL);
+        criticalJobs = criticalJobs + 1;
+      } else if(normalizedScore == 3) {
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.SEVERE);
+        severeJobs = severeJobs + 1;
+      } else if(normalizedScore == 2) {
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.MODERATE);
+      } else {
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.LOW);
+      }
+      orgAnalysisList.add(orgAnalysis);
+    }
+
+    return ok(orgAnalysisPage.render(org, subOrg, finishedTimeBegin, finishedTimeEnd,
+            orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, orgAnalysisList, criticalJobs, severeJobs)));
+  }
+
+
+  /**
    * Controls Job History. Displays at max MAX_HISTORY_LIMIT executions. Old version of the job history
    */
   public static Result oldJobHistory() {
@@ -690,7 +879,7 @@ public class Application extends Controller {
     if (!Utils.isSet(partialJobDefId)) {
       if (version.equals(Version.NEW)) {
         return ok(
-            jobHistoryPage.render(partialJobDefId, graphType, jobHistoryResults.render(null, null, -1, null)));
+                jobHistoryPage.render(partialJobDefId, graphType, jobHistoryResults.render(null, null, -1, null)));
       } else {
         return ok(oldJobHistoryPage.render(partialJobDefId, graphType, oldJobHistoryResults.render(null, null, -1, null)));
       }
@@ -702,25 +891,25 @@ public class Application extends Controller {
     if (graphType.equals("time") || graphType.equals("resources")) {
       // we don't need APP_HEURISTIC_RESULT_DETAILS data to plot for time and resources
       results = AppResult.find.select(
-          AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
-          .where()
-          .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
-          .order()
-          .desc(AppResult.TABLE.FINISH_TIME)
-          .setMaxRows(JOB_HISTORY_LIMIT)
-          .findList();
+              AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
+              .where()
+              .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
+              .order()
+              .desc(AppResult.TABLE.FINISH_TIME)
+              .setMaxRows(JOB_HISTORY_LIMIT)
+              .findList();
     } else {
       // Fetch all job executions
       results = AppResult.find.select(
-          AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
-          .where()
-          .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
-          .order()
-          .desc(AppResult.TABLE.FINISH_TIME)
-          .setMaxRows(JOB_HISTORY_LIMIT)
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
-          .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS, "*")
-          .findList();
+              AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
+              .where()
+              .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
+              .order()
+              .desc(AppResult.TABLE.FINISH_TIME)
+              .setMaxRows(JOB_HISTORY_LIMIT)
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS, "*")
+              .findList();
     }
 
     for (AppResult result : results) {
@@ -733,8 +922,8 @@ public class Application extends Controller {
       return notFound("Unable to find record for job def id: " + jobDefPair.getId());
     }
     Map<IdUrlPair, List<AppResult>> flowExecIdToJobsMap = ControllerUtil
-        .limitHistoryResults(ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID),
-            results.size(), MAX_HISTORY_LIMIT);
+            .limitHistoryResults(ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID),
+                    results.size(), MAX_HISTORY_LIMIT);
 
     // Compute job execution data
     List<Long> flowExecTimeList = new ArrayList<Long>();
@@ -763,26 +952,27 @@ public class Application extends Controller {
     if (version.equals(Version.NEW)) {
       if (graphType.equals("heuristics")) {
         return ok(jobHistoryPage.render(jobDefPair.getId(), graphType,
-            jobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
+                jobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
       } else if (graphType.equals("resources") || graphType.equals("time")) {
-          return ok(jobHistoryPage.render(jobDefPair.getId(), graphType,
-              jobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
+        return ok(jobHistoryPage.render(jobDefPair.getId(), graphType,
+                jobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
       }
     } else {
       if (graphType.equals("heuristics")) {
         return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType,
-            oldJobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
+                oldJobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
       } else if (graphType.equals("resources") || graphType.equals("time")) {
         if (hasSparkJob) {
           return notFound("Resource and time graph are not supported for spark right now");
         } else {
           return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType,
-              oldJobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
+                  oldJobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
         }
       }
     }
     return notFound("Unable to find graph type: " + graphType);
   }
+
 
   /**
    * Returns the help based on the version
@@ -937,9 +1127,6 @@ public class Application extends Controller {
 
     return ok(Json.toJson(resMap));
   }
-
-
-
 
 
   /**
@@ -1218,7 +1405,7 @@ public class Application extends Controller {
       int jobPerfScore = 0;
       JsonArray stageScores = new JsonArray();
       List<AppResult> mrJobsList = Lists.reverse(flowExecIdToJobsMap.get(flowExecPair));
-      for (AppResult appResult : flowExecIdToJobsMap.get(flowExecPair)) {
+      for (AppResult appResult : mrJobsList) {
 
         // Each MR job triggered by jobDefId for flowExecId
         int mrPerfScore = 0;
@@ -1247,6 +1434,135 @@ public class Application extends Controller {
     JsonArray sortedDatasets = Utils.sortJsonArray(datasets);
 
     return ok(new Gson().toJson(sortedDatasets));
+  }
+
+  /**
+   * The data for populating select options for sub-org for a particular org on job analysis page. While populating the
+   * details an ajax call is made to this to fetch the data.
+   *
+   * Data Returned:
+   * <pre>
+   * {@code
+   *   [
+   *     {
+   *       "subOrg": x,
+   *     },
+   *     {
+   *       "subOrg": y,
+   *     }
+   *   ]
+   * }
+   * </pre>
+   */
+  public static Result restOrgToSubOrgList(String org) {
+    JsonArray dataSets = new JsonArray();
+    String sql = "select distinct(sub_organization) from yarn_app_result where organization = :org";
+    List<SqlRow> subOrgList = Ebean.createSqlQuery(sql)
+            .setParameter("org", org)
+            .findList();
+    for(SqlRow row: subOrgList) {
+      JsonObject jsonObject = new JsonObject();
+      jsonObject.addProperty("subOrg", row.getString("sub_organization"));
+      dataSets.add(jsonObject);
+    }
+    return ok(new Gson().toJson(dataSets));
+  }
+
+  /**
+   * The data for plotting the job analysis graph. While plotting the job analysis
+   * graph an ajax call is made to this to fetch the graph data.
+   *
+   * Data Returned:
+   * <pre>
+   * {@code
+   *   [
+   *     {
+   *       "flowtime": <Last job's finish time>,
+   *       "score": 1000,
+   *       "heuristicInfo": [
+   *         {
+   *           "heuristicName:" "h1",
+   *           "heuristicScore": 500
+   *         },
+   *         {
+   *           "heuristicName:" "h2",
+   *           "heuristicScore": 400
+   *         }
+   *       ]
+   *     },
+   *     {
+   *       "flowtime": <Last job's finish time>,
+   *       "score": 700,
+   *       "heuristicInfo": [
+   *         {
+   *           "heuristicName:" "id",
+   *           "heuristicScore": 0
+   *         },
+   *         {
+   *           "heuristicName:" "id",
+   *           "heuristicScore": 700
+   *         }
+   *       ]
+   *     }
+   *   ]
+   * }
+   * </pre>
+   */
+  public static Result restJobAnalysisGraphData(String jobDefId, String finishedTimeBegin, String finishedTimeEnd) {
+    JsonArray datasets = new JsonArray();
+    if (jobDefId == null || jobDefId.isEmpty()) {
+      return ok(new Gson().toJson(datasets));
+    }
+
+    int jobScore;
+    String sql = "select distinct job_exec_id from yarn_app_result where job_def_id = :job_def_id and finish_time>= :finished_time_begin and finish_time<= :finished_time_end ";
+    List<SqlRow> jobExecIdList = Ebean.createSqlQuery(sql)
+            .setParameter("job_def_id", jobDefId)
+            .setParameter("finished_time_begin", Utils.isSet(finishedTimeBegin) ? Long.parseLong(finishedTimeBegin) : Long.MIN_VALUE)
+            .setParameter("finished_time_end", Utils.isSet(finishedTimeEnd) ? Long.parseLong(finishedTimeEnd) : Long.MAX_VALUE)
+            .findList();
+    Iterator<SqlRow> jobExecIdListIterator = jobExecIdList.iterator();
+
+    while(jobExecIdListIterator.hasNext()) {
+
+      String jobExecId = jobExecIdListIterator.next().getString("job_exec_id");
+      AppResult appResult = AppResult.find.select("*")
+              .where()
+              .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
+              .eq(AppResult.TABLE.JOB_EXEC_ID, jobExecId)
+              .order()
+              .desc(AppResult.TABLE.FINISH_TIME)
+              .setMaxRows(1)
+              .findUnique();
+
+      sql = "select b.heuristic_name, sum(b.score) as heuristic_score from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id  where a.job_def_id = :job_def_id and a.job_exec_id = :job_exec_id group by b.heuristic_name";
+      List<SqlRow> heuristicsInfoList = Ebean.createSqlQuery(sql)
+              .setParameter("job_def_id", jobDefId)
+              .setParameter("job_exec_id", jobExecId)
+              .findList();
+      Iterator<SqlRow> heuristicsInfoListIterator = heuristicsInfoList.iterator();
+
+      jobScore = 0;
+      JsonArray heuristicsInfoJsonArray = new JsonArray();
+      while(heuristicsInfoListIterator.hasNext()) {
+
+        SqlRow heuristicsInfoRow = heuristicsInfoListIterator.next();
+        JsonObject heuristicInfo = new JsonObject();
+        heuristicInfo.addProperty("heuristicName", heuristicsInfoRow.getString("heuristic_name"));
+        heuristicInfo.addProperty("heuristicScore", heuristicsInfoRow.getInteger("heuristic_score"));
+        jobScore = jobScore + heuristicsInfoRow.getInteger("heuristic_score");
+        heuristicsInfoJsonArray.add(heuristicInfo);
+      }
+
+      JsonObject dataSet = new JsonObject();
+      dataSet.addProperty("flowtime", Utils.getFlowTime(appResult));
+      dataSet.addProperty("score", jobScore);
+      dataSet.add("heuristicInfo", heuristicsInfoJsonArray);
+      datasets.add(dataSet);
+    }
+
+    JsonArray sortedDataSets = Utils.sortJsonArray(datasets);
+    return ok(new Gson().toJson(sortedDataSets));
   }
 
   /**

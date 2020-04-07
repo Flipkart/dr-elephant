@@ -31,6 +31,8 @@ CREATE TABLE yarn_app_result (
   workflow_depth   TINYINT(2)    UNSIGNED DEFAULT 0    COMMENT 'The application depth in the scheduled flow. Depth starts from 0',
   scheduler        VARCHAR(20)   DEFAULT NULL          COMMENT 'The scheduler which triggered the application',
   job_name         VARCHAR(255)  NOT NULL DEFAULT ''   COMMENT 'The name of the job in the flow to which this app belongs',
+  organization     VARCHAR(50)   DEFAULT ''            COMMENT 'The org executing the application',
+  sub_organization VARCHAR(50)   DEFAULT ''            COMMENT 'The sub-org executing the application',
   job_exec_id      VARCHAR(800)  NOT NULL DEFAULT ''   COMMENT 'A unique reference to a specific execution of the job/action(job in the workflow). This should filter all applications (mapreduce/spark) triggered by the job for a particular execution.',
   flow_exec_id     VARCHAR(255)  NOT NULL DEFAULT ''   COMMENT 'A unique reference to a specific flow execution. This should filter all applications fired by a particular flow execution. Note that if the scheduler supports sub-workflows, then this ID should be the super parent flow execution id that triggered the the applications and sub-workflows.',
   job_def_id       VARCHAR(800)  NOT NULL DEFAULT ''   COMMENT 'A unique reference to the job in the entire flow independent of the execution. This should filter all the applications(mapreduce/spark) triggered by the job for all the historic executions of that job.',

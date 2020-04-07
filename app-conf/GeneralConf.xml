@@ -24,7 +24,7 @@
   </property>
   <property>
     <name>drelephant.analysis.fetch.interval</name>
-    <value>60000</value>
+    <value>1800000</value>
     <description>Interval between fetches in milliseconds</description>
   </property>
   <property>
@@ -39,7 +39,7 @@
   </property>
   <property>
     <name>drelephant.executor.service.class.name</name>
-    <value>com.linkedin.drelephant.executors.ThreadPoolExecutorService</value>
+    <value>com.linkedin.drelephant.executors.QuartzExecutorService</value>
     <description>Executor service (can be one of ThreadPoolExecutorService or QuartzExecutorService)</description>
   </property>
   <!--

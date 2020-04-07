@@ -148,21 +148,7 @@ then
   exit 1
 fi
 
-# Get hadoop version by executing 'hadoop version' and parse the result
-HADOOP_VERSION=$(hadoop version | awk '{if (NR == 1) {print $2;}}')
-if [[ $HADOOP_VERSION == 1* ]];
-then
-  echo "This is hadoop1.x grid. Switch to hadoop2 if you want to use Dr. Elephant"
-elif [[ $HADOOP_VERSION == 2* ]];
-then
-  JAVA_LIB_PATH=$HADOOP_HOME"/lib/native"
-  echo "This is hadoop2.x grid. Adding Java library to path: "$JAVA_LIB_PATH
-else
-  echo "error: Hadoop isn't properly set on this machine. Could you verify cmd 'hadoop version'? "
-  exit 1
-fi
-
-OPTS+=" $jvm_args -Djava.library.path=$JAVA_LIB_PATH"
+OPTS+=" $jvm_args"
 OPTS+=" -Dhttp.port=$port"
 OPTS+=" -Ddb.default.url=$db_loc -Ddb.default.user=$db_user -Ddb.default.password=$db_password"
 

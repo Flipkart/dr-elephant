@@ -44,6 +44,8 @@ public class AppResult extends Model {
   public static final int QUEUE_NAME_LIMIT = 50;
   public static final int APP_NAME_LIMIT = 100;
   public static final int JOB_NAME_LIMIT = 255;
+  public static final int ORGANIZATION_LIMIT = 50;
+  public static final int SUB_ORGANIZATION_LIMIT = 50;
   public static final int TRACKING_URL_LIMIT = 255;
   public static final int JOBTYPE_LIMIT = 20;
   public static final int SCHEDULER_LIMIT = 20;
@@ -67,6 +69,8 @@ public class AppResult extends Model {
     public static final String WORKFLOW_DEPTH = "workflowDepth";
     public static final String SCHEDULER = "scheduler";
     public static final String JOB_NAME = "jobName";
+    public static final String ORGANIZATION = "organization";
+    public static final String SUB_ORGANIZATION = "subOrganization";
     public static final String JOB_EXEC_ID = "jobExecId";
     public static final String FLOW_EXEC_ID = "flowExecId";
     public static final String JOB_DEF_ID = "jobDefId";
@@ -125,6 +129,12 @@ public class AppResult extends Model {
 
   @Column(length = JOB_NAME_LIMIT, nullable = false)
   public String jobName;
+
+  @Column(length = ORGANIZATION_LIMIT)
+  public String organization;
+
+  @Column(length = SUB_ORGANIZATION_LIMIT)
+  public String subOrganization;
 
   @Column(length = URL_LEN_LIMIT, nullable = false)
   public String jobExecId;

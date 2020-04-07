@@ -32,7 +32,6 @@ import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
 import com.linkedin.drelephant.configurations.heuristic.HeuristicConfiguration;
 import com.linkedin.drelephant.configurations.heuristic.HeuristicConfigurationData;
 import com.linkedin.drelephant.configurations.jobtype.JobTypeConfiguration;
-import com.linkedin.drelephant.mapreduce.MapReduceMetricsAggregator;
 import com.linkedin.drelephant.util.Utils;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;

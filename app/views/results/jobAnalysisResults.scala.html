@@ -1,0 +1,85 @@
+@*
+* Copyright 2016 LinkedIn Corp.
+*
+* Licensed under the Apache License, Version 2.0 (the "License"); you may not
+* use this file except in compliance with the License. You may obtain a copy of
+* the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+* WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+* License for the specific language governing permissions and limitations under
+* the License.
+*@
+
+@(result: java.util.List[com.linkedin.drelephant.analysis.JobAnalysis], totalHeuristics: Integer, criticalHeuristics: Integer, severeHeuristics: Integer)
+
+@if(result != null && result.nonEmpty) {
+@tags.panel(){ Job Analysis } {
+<script src="@routes.Assets.at("assets/data-tables/js/jquery.dataTables.utility.js")" type="text/javascript"></script>
+<script src="@routes.Assets.at("assets/data-tables/js/jquery-1.12.4.js")" type="text/javascript"></script>
+<script src="@routes.Assets.at("assets/data-tables/js/jquery.dataTables.min.js")" type="text/javascript"></script>
+<script src="@routes.Assets.at("js/jobanalysisform.js")" type="text/javascript"></script>
+<script src="@routes.Assets.at("js/graphutility.js")" type="text/javascript"></script>
+<div>
+
+    <!-- Performance Score Graph -->
+      <div style='width:1078px; height:342px'>
+        <img src='@routes.Assets.at("images/loading.gif")' id='loading-indicator' alt='Loading...'
+        style='position:relative;left:50%;top:40%;display:none;'/>
+        <svg id="visualisation" width="100%" height="100%" style="overflow:visible"></svg>
+      </div>
+
+    <hr>
+    <div class="jumbotron" style="background-color: #ffffff;border-style: inset;padding-bottom:0px;">
+        <div class="jumbotron" style="border-style: outset;padding-bottom:0px; padding-left:10px; padding-top:10px;margin-bottom:30px;">
+        <p>Job needs check against <b>@totalHeuristics</b> heuristics<br>
+           @if(severeHeuristics > 0) {About <b>@severeHeuristics</b> of them could use some tuning.<br>}
+           @if(criticalHeuristics > 0) {About <b>@criticalHeuristics</b> of them  need some serious attention!}
+        </p>
+        </div>
+        <div class="table-responsive">
+          <table class="display table-hover" id="data-table">
+            <thead>
+                <tr>
+                    <th class="hasTooltip" style="min-width:200px; text-align: center;">HEURISTIC<div id="tooltip-div"><span> Heuristic name</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">SEVERITY LEVEL<div id="tooltip-div"><span> Severity level</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">SCORE<div id="tooltip-div"><span> Lower the score better the performance</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">CRITICAL SEVERITY<div id="tooltip-div"><span> Average of number of times heuristic came with severity level as Critical per job run</span></div></th>
+                    <th class="hasTooltip" style="min-width:150px; text-align: center;">SEVERE SEVERITY<div id="tooltip-div"><span> Average of number of times heuristic came with severity level as Severe per job run</span></div></th>
+                    <th class="hasTooltip" style="min-width:200px; text-align: center;">MODERATE SEVERITY<div id="tooltip-div"><span> Average of number of times heuristic came with severity level as Moderate per job run</span></div></th>
+                </tr>
+            </thead>
+
+            <tfoot>
+                <tr>
+                    <th>HEURISTIC</th>
+                    <th>SEVERITY LEVEL</th>
+                    <th>SCORE</th>
+                    <th>CRITICAL SEVERITY</th>
+                    <th>SEVERE SEVERITY</th>
+                    <th>MODERATE SEVERITY</th>
+                </tr>
+            </tfoot>
+
+            <tbody>
+                @for(jobAnalysis <- result) {
+                    <tr>
+                        <td style="min-width:200px; text-align: center;"><span class="label label-@jobAnalysis.getSeverity().getBootstrapColor()">@jobAnalysis.getHeuristicDetails().getHeuristicName()</span>@if(jobAnalysis.getSeverity().getValue > 1){ <a href="@routes.Application.oldHelp()?topic=@helper.urlEncode(jobAnalysis.getHeuristicDetails().getHeuristicName())">[Explain]</a> }</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getSeverity().getText</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getHeuristicDetails().getScore()</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getHeuristicDetails().getCriticalSeverity()</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getHeuristicDetails().getSevereSeverity()</td>
+                        <td style="min-width:200px; text-align: center;">@jobAnalysis.getHeuristicDetails().getModerateSeverity()</td>
+                    </tr>
+                }
+            </tbody>
+            </table>
+            <br><br>
+        </div>
+    </div>
+</div>
+}
+}

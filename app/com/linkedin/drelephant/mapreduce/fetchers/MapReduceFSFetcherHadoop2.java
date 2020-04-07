@@ -29,26 +29,16 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.hadoop.mapreduce.Counter;
-import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.hadoop.mapreduce.Counters;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.mapreduce.TaskID;
-import org.apache.hadoop.mapreduce.TaskType;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.jobhistory.JobHistoryParser;
 import org.apache.log4j.Logger;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
-import java.util.Map;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Properties;
-import java.util.TimeZone;
+import java.util.*;
 
 /**
  * This class implements the Fetcher for MapReduce Applications on Hadoop2
@@ -275,10 +265,10 @@ public class MapReduceFSFetcherHadoop2 extends MapReduceFetcher {
         reducerInfoList.add(taskInfo);
       }
     }
-    if (jobInfo.getTotalMaps() > MAX_SAMPLE_SIZE) {
+    if (jobInfo.getTotalMaps() > DEFAULT_MAX_SAMPLE_SIZE) {
       logger.debug(jobId + " total mappers: " + mapperInfoList.size());
     }
-    if (jobInfo.getTotalReduces() > MAX_SAMPLE_SIZE) {
+    if (jobInfo.getTotalReduces() > DEFAULT_MAX_SAMPLE_SIZE) {
       logger.debug(jobId + " total reducers: " + reducerInfoList.size());
     }
     MapReduceTaskData[] mapperList = getTaskData(jobId, mapperInfoList);

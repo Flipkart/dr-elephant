@@ -1,0 +1,7 @@
+tfoot input {
+        width: 100%;
+        padding: 3px;
+        box-sizing: border-box;
+        border-style: inset;
+        border-bottom: 5px;
+    }

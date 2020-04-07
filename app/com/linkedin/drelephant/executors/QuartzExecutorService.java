@@ -2,6 +2,7 @@ package com.linkedin.drelephant.executors;
 
 import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.analysis.AnalyticJob;
+import models.AppResult;
 import org.apache.commons.lang.time.DateUtils;
 import org.apache.log4j.Logger;
 import org.quartz.*;
@@ -10,9 +11,7 @@ import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Date;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 import static org.quartz.SimpleScheduleBuilder.simpleSchedule;
 
@@ -146,6 +145,7 @@ public class QuartzExecutorService implements IExecutorService {
 
     @Override
     public void execute(AnalyticJob analyticJob) {
+
 
         int retryCount = analyticJob.getRetriesCount();
         try {

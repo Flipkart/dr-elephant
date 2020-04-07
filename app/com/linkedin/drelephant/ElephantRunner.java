@@ -43,6 +43,7 @@ public class ElephantRunner implements Runnable {
   private static final String FETCH_INTERVAL_KEY = "drelephant.analysis.fetch.interval";
   private static final String RETRY_INTERVAL_KEY = "drelephant.analysis.retry.interval";
   private static final String EXECUTOR_SERVICE = "drelephant.executor.service.class.name";
+  private static final String HADOOP_CONF = "HadoopConf.xml";
 
   private long _fetchInterval;
   private long _retryInterval;
@@ -90,14 +91,16 @@ public class ElephantRunner implements Runnable {
   }
 
   private void loadAnalyticJobGenerator() {
-    if (HadoopSystemContext.isHadoop2Env()) {
+    if (HadoopSystemContext.instance().isHadoop2Env()) {
       _analyticJobGenerator = new AnalyticJobGeneratorHadoop2();
     } else {
       throw new RuntimeException("Unsupported Hadoop major version detected. It is not 2.x.");
     }
 
     try {
-      _analyticJobGenerator.configure(ElephantContext.instance().getGeneralConf());
+      Configuration configuration = new Configuration();
+      configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
+      _analyticJobGenerator.configure(configuration);
     } catch (Exception e) {
       logger.error("Error occurred when configuring the analysis provider.", e);
       throw new RuntimeException(e);

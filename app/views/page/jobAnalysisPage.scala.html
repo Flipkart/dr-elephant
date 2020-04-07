@@ -1,0 +1,72 @@
+@*
+* Copyright 2016 LinkedIn Corp.
+*
+* Licensed under the Apache License, Version 2.0 (the "License"); you may not
+* use this file except in compliance with the License. You may obtain a copy of
+* the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+* WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+* License for the specific language governing permissions and limitations under
+* the License.
+*@
+
+@(jobDefId: String, finishedTimeBegin: Long, finishedTimeEnd: Long, results: Html)
+
+@import java.util.Date
+@import java.text.SimpleDateFormat
+
+@getDateTime(epochTime : Long) = @{
+if(epochTime == null || epochTime==Long.MAX_VALUE || epochTime==Long.MIN_VALUE){
+null
+}
+else {
+val df:SimpleDateFormat = new SimpleDateFormat("MM/dd/yyyy")
+val date:String = df.format(epochTime)
+date
+}
+}
+
+@main("Dr. Elephant - Job Analysis", "jobanalysis") {
+
+<!-- The Search panel-->
+@tags.column(12) {
+@tags.panel(){ Job Details } {
+<form id="job-details-form" role="form" method="get" action="@routes.Application.jobAnalysis()">
+    <div class="form-group">
+        <label for="form-job-analysis-job-def-id">Job Definition URL/ID</label>
+        <input type="text" class="form-control" id="form-job-analysis-job-def-id" name="job-analysis-job-def-id" placeholder="Job Def URL/ID" value="@jobDefId">
+    </div>
+
+    <!--Job Finish Date filter-->
+
+    <div class="checkbox" id="form-org-details-checkbox">
+        <label><input type="checkbox" id="form-datetime-enable" name="datetime-enable" value=""> Job Finish
+            Date</label>
+    </div>
+    <div class="form-group" style="padding-left:10px;">
+        <input type="text" class="form-control" id="form-finished-time-begin-date" name="finished-time-begin-date"
+               placeholder="From: mm/dd/yyyy" value="@getDateTime(finishedTimeBegin)">
+
+        <input type="hidden" id="form-finished-time-begin" name="finished-time-begin" value=""/>
+    </div>
+    <div class="form-group" style="padding-left:10px;">
+        <input type="text" class="form-control" id="form-finished-time-end-date" name="finished-time-end-date"
+               placeholder="To: mm/dd/yyyy" value="@getDateTime(finishedTimeEnd)">
+        <input type="hidden" id="form-finished-time-end" name="finished-time-end" value=""/>
+    </div>
+
+    <br>
+    <button type="submit" class="btn btn-default" id="submit-button">Search</button>
+</form>
+}
+}
+
+@tags.column(12) {
+@results
+}
+
+}
